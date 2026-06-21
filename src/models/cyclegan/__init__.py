@@ -1,1 +1,0 @@
-"""CycleGAN model implementation."""

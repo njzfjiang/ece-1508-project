@@ -179,14 +179,7 @@ All active experiment settings live in `configs/base.yaml`. The
 
 ## Evaluation
 
-To evaluate trained models:
-
-```bash
-python -m src.eval.evaluate --model path/to/model --data data/processed --output results/evaluation
-```
-
-To aggregate results:
-
-```bash
-python -m src.eval.aggregate --results_dir results --output results/aggregated_results.json
-```
+The reusable metric implementations currently live in `src/eval/metrics.py`.
+The formal evaluation runner is intentionally not scaffolded yet; it will be
+added together with the agreed CMMD protocol and output manifest. Do not treat
+the training smoke-test outputs as final evaluation results.
