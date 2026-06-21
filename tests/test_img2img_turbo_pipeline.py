@@ -5,7 +5,10 @@ from omegaconf import OmegaConf
 from PIL import Image
 
 from scripts.prepare_img2img_turbo_data import prepare_dataset_view
-from src.train.run_experiment import build_training_command
+from src.train.run_experiment import (
+    PIX2PIX_FP16_PATCH_MARKER,
+    build_training_command,
+)
 
 
 def write_image(path: Path):
@@ -89,3 +92,10 @@ def test_commands_use_upstream_argument_names(tmp_path):
     assert pix2pix[pix2pix.index("--mixed_precision") + 1] == "fp16"
     assert "--num_machines" in pix2pix
     assert "--dynamo_backend" in cyclegan
+
+
+def test_fp16_patch_keeps_trainable_master_weights_in_fp32():
+    patch = Path("patches/img2img-turbo-pix2pix-fp16.patch").read_text()
+    assert PIX2PIX_FP16_PATCH_MARKER in patch
+    assert "-    net_pix2pix.to(dtype=weight_dtype)" in patch
+    assert "-    net_disc.to(dtype=weight_dtype)" in patch

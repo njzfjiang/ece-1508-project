@@ -20,6 +20,7 @@ from scripts.prepare_img2img_turbo_data import prepare_dataset_view
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "base.yaml"
 DEFAULT_EXTERNAL_ROOT = PROJECT_ROOT / "external" / "img2img-turbo"
 PINNED_IMG2IMG_TURBO_COMMIT = "86f54146590ffb4543c8cf85b5a36657da670924"
+PIX2PIX_FP16_PATCH_MARKER = "Keep trainable parameters in FP32"
 
 
 def config_path(config: DictConfig, key: str, default=None):
@@ -53,6 +54,12 @@ def validate_external_repo(external_root: Path) -> None:
                 f"img2img-turbo is at {revision}, expected "
                 f"{PINNED_IMG2IMG_TURBO_COMMIT}. Re-run the setup script."
             )
+    pix2pix_training = external_root / "src" / "train_pix2pix_turbo.py"
+    if PIX2PIX_FP16_PATCH_MARKER not in pix2pix_training.read_text(encoding="utf-8"):
+        raise ValueError(
+            "The pinned img2img-turbo checkout is missing the pix2pix FP16 "
+            "compatibility patch. Re-run `bash scripts/setup_img2img_turbo.sh`."
+        )
 
 
 def build_training_command(

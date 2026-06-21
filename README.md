@@ -35,6 +35,11 @@ The setup script pins the official `img2img-turbo` checkout to commit
 `86f54146590ffb4543c8cf85b5a36657da670924`. Set `SKIP_INSTALL=1` if the
 environment is already installed.
 
+It also applies a small compatibility patch to the pinned pix2pix trainer:
+trainable parameters remain as FP32 master weights while Accelerate autocast
+handles FP16 forward passes. This avoids GradScaler's
+`Attempting to unscale FP16 gradients` failure.
+
 The Conda environment also pins MKL/Intel OpenMP to 2024.0. PyTorch 2.0.1 can
 otherwise fail during import with an undefined `iJIT_NotifyEvent` symbol when
 resolved against MKL 2024.1 or newer.

@@ -1,0 +1,17 @@
+diff --git a/src/train_pix2pix_turbo.py b/src/train_pix2pix_turbo.py
+index 39c738b..99d1e12 100644
+--- a/src/train_pix2pix_turbo.py
++++ b/src/train_pix2pix_turbo.py
+@@ -129,9 +129,9 @@ def main(args):
+     elif accelerator.mixed_precision == "bf16":
+         weight_dtype = torch.bfloat16
+ 
+-    # Move all networks to weight_dtype # device is set automatically in accelerator.prepare
+-    net_pix2pix.to(dtype=weight_dtype)
+-    net_disc.to(dtype=weight_dtype)
++    # Keep trainable parameters in FP32. Accelerate's autocast handles mixed
++    # precision forward passes, while GradScaler requires FP32 master gradients
++    # for unscale and gradient clipping.
+     net_lpips.to(dtype=weight_dtype)
+     net_clip.to(dtype=weight_dtype)
+ 
