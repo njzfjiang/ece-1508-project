@@ -33,7 +33,6 @@ MANIFEST
 
 # Jupyter Notebook
 .ipynb_checkpoints
-*.ipynb
 
 # IPython
 profile_default/
@@ -59,25 +58,39 @@ conda_env/
 *.swo
 *~
 .DS_Store
+Thumbs.db
+Desktop.ini
 
 # Data and results
-data/raw/*
-data/processed/*
-results/*
+data/raw/
+data/processed/
+data/splits/
+results/
+outputs/
+artifacts/
 *.log
 
 # Temporary files
 *.tmp
 *.temp
 *.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Model files
 *.pth
 *.pt
 *.ckpt
+*.safetensors
+*.onnx
 checkpoints/
 
 # Experiment tracking
 .wandb/
+wandb/
 runs/
 lightning_logs/
