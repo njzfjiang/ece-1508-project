@@ -41,7 +41,7 @@ Before starting any experiments, record your data preparation steps here.
 #### Experiment 1: CycleGAN Baseline (Full Dataset)
 - **Date**: 
 - **Model**: CycleGAN
-- **Configuration**: configs/cyclegan/config.yaml
+- **Configuration**: configs/base.yaml (`cyclegan_turbo` section)
 - **Shot Level**: Full training set
 - **Seed**: N/A
 - **Results**: 
@@ -53,7 +53,7 @@ Before starting any experiments, record your data preparation steps here.
 #### Experiment 2: CycleGAN Few-Shot Learning
 - **Date**: 
 - **Model**: CycleGAN
-- **Configuration**: configs/cyclegan/config.yaml
+- **Configuration**: configs/base.yaml (`cyclegan_turbo` section)
 - **Shot Level**: 10-shot
 - **Seed**: 1
 - **Results**: 
@@ -67,7 +67,7 @@ Before starting any experiments, record your data preparation steps here.
 #### Experiment 1: SD-Turbo Baseline (Full Dataset)
 - **Date**: 
 - **Model**: SD-Turbo
-- **Configuration**: configs/sdturbo/config.yaml
+- **Configuration**: configs/base.yaml (`pix2pix_turbo` section)
 - **Shot Level**: Full training set
 - **Seed**: N/A
 - **Results**: 
@@ -79,7 +79,7 @@ Before starting any experiments, record your data preparation steps here.
 #### Experiment 2: SD-Turbo Few-Shot Learning
 - **Date**: 
 - **Model**: SD-Turbo
-- **Configuration**: configs/sdturbo/config.yaml
+- **Configuration**: configs/base.yaml (`pix2pix_turbo` section)
 - **Shot Level**: 10-shot
 - **Seed**: 1
 - **Results**: 
@@ -94,10 +94,10 @@ Before starting any experiments, record your data preparation steps here.
 
 ```bash
 # Run with full dataset
-python -m src.train.run_experiment --config configs/cyclegan/config.yaml --model cyclegan
+python src/train/run_experiment.py --config configs/base.yaml --model cyclegan
 
 # Run with few-shot splits
-python -m src.train.run_experiment --config configs/cyclegan/config.yaml --model cyclegan --shot 10 --seed 1
+python src/train/run_experiment.py --config configs/base.yaml --model cyclegan --shots 10 --seeds 1
 ```
 
 ### Notes

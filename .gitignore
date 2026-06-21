@@ -64,7 +64,6 @@ Desktop.ini
 # Data and results
 data/raw/
 data/processed/
-data/splits/
 results/
 outputs/
 artifacts/
@@ -94,3 +93,4 @@ checkpoints/
 wandb/
 runs/
 lightning_logs/
+external/

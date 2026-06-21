@@ -18,9 +18,15 @@ This project implements and evaluates different generative models for image-to-i
 
 ## Setup
 
-1. Install dependencies: `pip install -r requirements.txt`
-2. Set up the environment: `conda env create -f environment.yaml`
-3. Download datasets: `bash scripts/download_data.sh`
+```bash
+conda env create -f environment.yaml
+conda activate ece-1508
+bash scripts/setup_img2img_turbo.sh
+bash scripts/download_data.sh
+```
+
+The supported baseline is Python 3.10, PyTorch 2.0.1, and CUDA 11.8. The setup
+script pins the official img2img-turbo source revision used by this project.
 
 ## Running Experiments
 
@@ -33,13 +39,23 @@ bash scripts/run_all_experiments.sh
 Or run specific models:
 
 ```bash
-python -m src.train.run_experiment --config configs/cyclegan/config.yaml --model cyclegan
-python -m src.train.run_experiment --config configs/sdturbo/config.yaml --model sdturbo
+python src/train/run_experiment.py --model pix2pix --shots 10 --seeds 1
+python src/train/run_experiment.py --model cyclegan --shots 20 --seeds 2
 ```
 
 ## Data Preparation
 
 Before running experiments, you need to prepare the dataset and generate few-shot splits:
+
+The canonical dataset and model adapter are intentionally separate:
+
+```text
+raw data
+  -> prepare_fewshot_splits.py
+processed day2night data + split JSON
+  -> prepare_img2img_turbo_data.py
+official train_A/train_B/test_A/test_B views
+```
 
 The helper script can be launched from any working directory because it resolves all paths relative to the repository:
 
@@ -99,6 +115,24 @@ Check if the preprocessing was successful:
 ```bash
 ls -la data/processed/day2night/train/
 ls -la data/processed/splits/fewshot/
+```
+
+The launcher automatically adapts each split to the official img2img-turbo
+layout. You can prepare all views manually with:
+
+```bash
+python scripts/prepare_img2img_turbo_data.py
+```
+
+This single adapter supports both pix2pix-turbo and CycleGAN-Turbo. The
+CycleGAN loader independently samples the two domains, so a separate unpaired
+data-preparation script is unnecessary. Active settings for both models are in
+`configs/base.yaml`.
+
+Before committing GPU time, validate the complete experiment matrix:
+
+```bash
+DRY_RUN=1 bash scripts/run_all_experiments.sh
 ```
 
 ## Evaluation

@@ -93,7 +93,11 @@ def parse_args():
 
 def reset_output(output_dir: Path):
     """Remove only the directories managed by this script."""
-    for managed_dir in (output_dir / "day2night", output_dir / "splits"):
+    for managed_dir in (
+        output_dir / "day2night",
+        output_dir / "splits",
+        output_dir / "img2img_turbo",
+    ):
         if managed_dir.exists():
             shutil.rmtree(managed_dir)
 
@@ -102,7 +106,11 @@ def ensure_output_is_empty(output_dir: Path):
     """Refuse to mix a new split with files from an earlier preprocessing run."""
     existing = [
         path
-        for managed_dir in (output_dir / "day2night", output_dir / "splits")
+        for managed_dir in (
+            output_dir / "day2night",
+            output_dir / "splits",
+            output_dir / "img2img_turbo",
+        )
         if managed_dir.exists()
         for path in managed_dir.iterdir()
     ]

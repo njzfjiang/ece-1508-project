@@ -1,38 +1,53 @@
-# Core dependencies
-torch==2.0.0
-torchvision==0.15.0
-torchaudio==2.0.0
+# Reproducible baseline for img2img-turbo (Python 3.10).
+# For CUDA builds, prefer creating the Conda environment from environment.yaml.
 
-# PyYAML for configuration
-PyYAML==6.0
+# PyTorch stack compatible with the pinned img2img-turbo revision
+torch==2.0.1
+torchvision==0.15.2
+torchaudio==2.0.2
+torchdata==0.6.1
+torchmetrics>=1.0.1,<1.4
+xformers==0.0.20
 
-# Image processing
-Pillow==9.5.0
-scikit-image==0.20.0
+# Official img2img-turbo runtime
+accelerate>=0.24,<0.28
+diffusers==0.25.1
+transformers==4.35.2
+huggingface-hub>=0.19.4,<0.26
+tokenizers>=0.14,<0.19
+peft>=0.7,<0.11
+safetensors>=0.4,<0.5
+einops>=0.6.1,<0.9
+timm>=0.9.2,<1.0
+open-clip-torch>=2.20,<3
+clip @ git+https://github.com/openai/CLIP.git
+vision-aided-loss
 
-# Visualization
-matplotlib==3.7.1
-seaborn==0.12.2
-plotly==5.14.0
+# Data and evaluation
+numpy>=1.24.4,<2
+scipy==1.11.1
+Pillow>=9.5,<11
+opencv-python==4.6.0.66
+scikit-image>=0.20,<0.23
+lpips>=0.1.4
+clean-fid>=0.1.35
 
-# Utilities
-numpy==1.24.3
-scipy==1.10.1
-pandas==2.0.2
+# Configuration and logging
+PyYAML>=6.0,<7
+omegaconf>=2.3,<3
+tensorboard>=2.13,<3
+wandb>=0.15,<0.18
+tqdm>=4.65,<5
+urllib3>=1.25.4,<1.27
 
-# Jupyter notebooks
-jupyter==1.0.0
-jupyterlab==3.6.3
-ipywidgets==8.0.6
+# Notebooks and visualization
+matplotlib>=3.7,<3.9
+seaborn>=0.12,<0.14
+jupyter>=1.0,<2
+jupyterlab>=3.6,<5
+ipywidgets>=8,<9
 
-# Metrics and evaluation
-scikit-learn==1.2.2
-
-# Logging and monitoring
-tensorboard==2.13.0
-wandb==0.15.0
-
-# Development tools
-black==23.3.0
-flake8==6.0.0
-pytest==7.3.1
+# Development
+black>=23.3,<25
+flake8>=6,<8
+pytest>=7.3,<9

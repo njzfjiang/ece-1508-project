@@ -1,4 +1,9 @@
-# src/data/dataset.py
+"""Project-native dataset loader for EDA, evaluation, and custom experiments.
+
+Official pix2pix-turbo and CycleGAN-Turbo training does not use this loader.
+Those scripts consume the upstream-compatible views created by
+scripts/prepare_img2img_turbo_data.py.
+"""
 
 import json
 from pathlib import Path
@@ -11,12 +16,16 @@ import torchvision.transforms as transforms
 
 class DarkDrivingFewShotDataset(Dataset):
     """
-    Few-shot DarkDriving dataset for day-to-night translation.
+    Project-native paired DarkDriving dataset for day-to-night translation.
 
     Supports:
     - Full training set
     - Few-shot splits (loaded from JSON)
     - Paired (day, night) loading
+
+    This class is intentionally paired and is not the unpaired CycleGAN-Turbo
+    loader. The official CycleGAN-Turbo loader randomizes samples across
+    train_A and train_B in the generated upstream-compatible dataset view.
     """
 
     def __init__(

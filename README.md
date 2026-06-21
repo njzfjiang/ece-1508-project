@@ -23,8 +23,20 @@ We ask: Under extreme data scarcity (10, 20, and 50 training pairs), which learn
 
 ## Setup
 
-1. Install dependencies: `pip install -r requirements.txt`
-2. Set up the environment: `conda env create -f environment.yaml`
+Python 3.10 and CUDA 11.8 are the reproducible baseline. Conda is recommended:
+
+```bash
+conda env create -f environment.yaml
+conda activate ece-1508
+bash scripts/setup_img2img_turbo.sh
+```
+
+The setup script pins the official `img2img-turbo` checkout to commit
+`86f54146590ffb4543c8cf85b5a36657da670924`. Set `SKIP_INSTALL=1` if the
+environment is already installed.
+
+For a pip-based environment, first install a compatible PyTorch 2.0.1/CUDA
+build, then run `python -m pip install -r requirements.txt`.
 
 ## Data Download
 
@@ -44,6 +56,21 @@ The dataset is not automatically downloaded due to license and file size.
 ## Data Preparation
 
 Before running experiments, you need to prepare the dataset and generate few-shot splits:
+
+The data pipeline has two deliberate layers:
+
+```text
+data/raw/darkdriving_lle
+    -> prepare_fewshot_splits.py
+data/processed/day2night + data/processed/splits
+    -> prepare_img2img_turbo_data.py
+data/processed/img2img_turbo/<shot>shot/seed<seed>
+```
+
+The first layer is the canonical, model-independent dataset and reproducible
+split definition. The second is a lightweight adapter for the official
+img2img-turbo loaders. Do not replace the first layer with model-specific
+preprocessing.
 
 You can run the helper script from any working directory; it resolves paths relative to the repository:
 
@@ -104,20 +131,51 @@ Check if the preprocessing was successful:
 ls -la data/processed/day2night/train/
 ls -la data/processed/splits/fewshot/
 ```
+
+### Step 3: Prepare Official Training Views
+
+The experiment launcher creates these views automatically. To create all of
+them ahead of time:
+
+```bash
+python scripts/prepare_img2img_turbo_data.py
+```
+
+Each `shot/seed` view contains the upstream `train_A`, `train_B`, `test_A`,
+`test_B`, prompt JSON, and fixed-prompt files. Files use hardlinks when
+possible, so the views do not duplicate image contents.
+
+The same adapter supports both models; no separate CycleGAN data script is
+needed. Both models receive the same selected day and night samples for a fair
+few-shot comparison. The official CycleGAN-Turbo loader samples the two
+domains independently during training, making its batches unpaired.
+
+`src/data/dataset.py` remains available as the project-native paired loader for
+EDA, evaluation, and custom experiments. Official training does not use it.
+
 ## Running Experiments
 
-To run experiments:
+Validate all 18 commands and dataset views without starting GPU training:
+
+```bash
+DRY_RUN=1 bash scripts/run_all_experiments.sh
+```
+
+Run all experiments sequentially on GPU 0:
 
 ```bash
 bash scripts/run_all_experiments.sh
 ```
 
-Or run specific models:
+Select another GPU with `GPU_ID=1`. To run a specific model:
 
 ```bash
-python -m src.train.run_experiment --config configs/cyclegan/config.yaml --model cyclegan
-python -m src.train.run_experiment --config configs/sdturbo/config.yaml --model sdturbo
+python src/train/run_experiment.py --model pix2pix --shots 10 --seeds 1 --gpu 0
+python src/train/run_experiment.py --model cyclegan --shots 20 --seeds 2 --gpu 0
 ```
+
+All active experiment settings live in `configs/base.yaml`. The
+`pix2pix_turbo` and `cyclegan_turbo` sections contain model-specific options.
 
 ## Evaluation
 
