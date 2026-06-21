@@ -153,6 +153,25 @@ domains independently during training, making its batches unpaired.
 `src/data/dataset.py` remains available as the project-native paired loader for
 EDA, evaluation, and custom experiments. Official training does not use it.
 
+### Optional: Package a Reduced Colab Dataset
+
+Build a deterministic smoke-test archive without uploading the full raw
+dataset:
+
+```bash
+python scripts/package_darkdriving_smoke.py \
+  --shot 10 \
+  --seed 1 \
+  --test-pairs 50 \
+  --output artifacts/darkdriving_smoke.tar.gz
+```
+
+The archive contains only the selected training pairs, a fixed random sample
+of paired test images, the matching split JSON, and a manifest under the
+canonical `data/processed/` hierarchy. A `.sha256` sidecar is generated for
+upload verification. Upload both files to the Drive location configured in the
+Colab notebook.
+
 ## Running Experiments
 
 Validate all 18 commands and dataset views without starting GPU training:
