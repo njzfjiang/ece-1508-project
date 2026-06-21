@@ -64,11 +64,18 @@ def build_training_command(
     output_dir: Path,
 ) -> list[str]:
     """Map project configuration to the official upstream CLI."""
+    mixed_precision = str(config_path(config, "training.mixed_precision", "fp16"))
     common = [
         "accelerate",
         "launch",
         "--num_processes",
         "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        mixed_precision,
+        "--dynamo_backend",
+        "no",
     ]
     pretrained = str(config_path(config, "model.backbone", "stabilityai/sd-turbo"))
     batch_size = str(config_path(config, "data.batch_size", 1))
@@ -80,9 +87,10 @@ def build_training_command(
         config_path(config, "training.gradient_accumulation_steps", 1)
     )
     scheduler = str(config_path(config, "training.lr_scheduler", "constant"))
-    report_to = (
-        "wandb" if config_path(config, "logging.use_wandb", False) else "tensorboard"
-    )
+    # The pinned upstream scripts do not pass a logging_dir to Accelerator, so
+    # TensorBoard cannot be initialized. Keep the upstream-supported wandb
+    # tracker and disable it through WANDB_MODE when external logging is off.
+    report_to = "wandb"
 
     if model == "pix2pix":
         command = common + [
@@ -114,7 +122,7 @@ def build_training_command(
             "--lr_scheduler",
             scheduler,
             "--mixed_precision",
-            str(config_path(config, "training.mixed_precision", "fp16")),
+            mixed_precision,
             "--report_to",
             report_to,
             "--tracker_project_name",
@@ -261,6 +269,9 @@ def run_single_experiment(
     env["ACCELERATE_MIXED_PRECISION"] = str(
         config_path(config, "training.mixed_precision", "fp16")
     )
+    if not config_path(config, "logging.use_wandb", False):
+        env["WANDB_MODE"] = "disabled"
+        env["WANDB_SILENT"] = "true"
     result = subprocess.run(command, env=env, cwd=external_root, check=False)
     return result.returncode == 0
 

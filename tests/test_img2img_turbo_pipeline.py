@@ -84,3 +84,8 @@ def test_commands_use_upstream_argument_names(tmp_path):
     assert "--lambda_identity" not in cyclegan
     assert "--lora_rank_unet" in pix2pix
     assert "--lora_rank_vae" in cyclegan
+    assert pix2pix[pix2pix.index("--report_to") + 1] == "wandb"
+    assert cyclegan[cyclegan.index("--report_to") + 1] == "wandb"
+    assert pix2pix[pix2pix.index("--mixed_precision") + 1] == "fp16"
+    assert "--num_machines" in pix2pix
+    assert "--dynamo_backend" in cyclegan

@@ -39,6 +39,10 @@ The Conda environment also pins MKL/Intel OpenMP to 2024.0. PyTorch 2.0.1 can
 otherwise fail during import with an undefined `iJIT_NotifyEvent` symbol when
 resolved against MKL 2024.1 or newer.
 
+The pinned upstream training scripts initialize a Weights & Biases tracker.
+When `logging.use_wandb: false`, the launcher sets `WANDB_MODE=disabled`, so no
+account, login, network upload, or external run is created.
+
 For a pip-based environment, first install a compatible PyTorch 2.0.1/CUDA
 build, then run `python -m pip install -r requirements.txt`.
 
