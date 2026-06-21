@@ -35,6 +35,10 @@ The setup script pins the official `img2img-turbo` checkout to commit
 `86f54146590ffb4543c8cf85b5a36657da670924`. Set `SKIP_INSTALL=1` if the
 environment is already installed.
 
+The Conda environment also pins MKL/Intel OpenMP to 2024.0. PyTorch 2.0.1 can
+otherwise fail during import with an undefined `iJIT_NotifyEvent` symbol when
+resolved against MKL 2024.1 or newer.
+
 For a pip-based environment, first install a compatible PyTorch 2.0.1/CUDA
 build, then run `python -m pip install -r requirements.txt`.
 

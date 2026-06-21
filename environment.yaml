@@ -10,5 +10,9 @@ dependencies:
   - torchvision=0.15.2
   - torchaudio=2.0.2
   - pytorch-cuda=11.8
+  # PyTorch 2.0.1 expects the Intel JIT symbols shipped before MKL 2024.1.
+  # Without these pins, importing torch can fail with undefined iJIT_NotifyEvent.
+  - mkl=2024.0
+  - intel-openmp=2024.0
   - pip:
       - -r requirements.txt
