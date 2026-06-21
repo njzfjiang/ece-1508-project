@@ -51,6 +51,11 @@ The pinned upstream training scripts initialize a Weights & Biases tracker.
 When `logging.use_wandb: false`, the launcher sets `WANDB_MODE=disabled`, so no
 account, login, network upload, or external run is created.
 
+The Colab notebook intentionally uses 256x256 images, batch size 1, and
+gradient checkpointing so the complete training path fits on a 16 GB T4. This
+is a systems smoke test only; the formal experiment configuration remains
+512x512 in `configs/base.yaml` and should run on a larger persistent GPU.
+
 For a pip-based environment, first install a compatible PyTorch 2.0.1/CUDA
 build, then run `python -m pip install -r requirements.txt`.
 

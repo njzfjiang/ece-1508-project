@@ -215,6 +215,8 @@ def build_training_command(
     max_train_steps = config_path(config, "training.max_train_steps")
     if max_train_steps is not None:
         command.extend(["--max_train_steps", str(max_train_steps)])
+    if config_path(config, "training.gradient_checkpointing", False):
+        command.append("--gradient_checkpointing")
     if config_path(config, "model.enable_xformers", True):
         command.append("--enable_xformers_memory_efficient_attention")
     return command

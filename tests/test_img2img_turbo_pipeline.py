@@ -94,6 +94,15 @@ def test_commands_use_upstream_argument_names(tmp_path):
     assert "--dynamo_backend" in cyclegan
 
 
+def test_gradient_checkpointing_is_configurable(tmp_path):
+    config = OmegaConf.load(Path("configs/base.yaml"))
+    config.training.gradient_checkpointing = True
+    command = build_training_command(
+        "pix2pix", 10, 1, config, tmp_path / "dataset", tmp_path / "output"
+    )
+    assert "--gradient_checkpointing" in command
+
+
 def test_fp16_patch_keeps_trainable_master_weights_in_fp32():
     patch = Path("patches/img2img-turbo-pix2pix-fp16.patch").read_text()
     assert PIX2PIX_FP16_PATCH_MARKER in patch

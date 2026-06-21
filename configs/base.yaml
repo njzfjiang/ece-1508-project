@@ -28,6 +28,7 @@ training:
   learning_rate: 1e-4
   lr_scheduler: "constant"
   gradient_accumulation_steps: 1
+  gradient_checkpointing: false
   mixed_precision: "fp16"
   save_every: 500
   eval_every: 200
