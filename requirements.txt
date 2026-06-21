@@ -1,6 +1,9 @@
 # Reproducible baseline for img2img-turbo (Python 3.10).
 # For CUDA builds, prefer creating the Conda environment from environment.yaml.
 
+# vision-aided-loss imports gdown, which still imports pkg_resources.
+setuptools<81
+
 # PyTorch stack compatible with the pinned img2img-turbo revision
 torch==2.0.1
 torchvision==0.15.2

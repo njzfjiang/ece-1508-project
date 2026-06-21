@@ -39,6 +39,9 @@ The Conda environment also pins MKL/Intel OpenMP to 2024.0. PyTorch 2.0.1 can
 otherwise fail during import with an undefined `iJIT_NotifyEvent` symbol when
 resolved against MKL 2024.1 or newer.
 
+`setuptools` is pinned below 81 because the upstream vision-aided discriminator
+loads `gdown`, which still imports the legacy `pkg_resources` module.
+
 The pinned upstream training scripts initialize a Weights & Biases tracker.
 When `logging.use_wandb: false`, the launcher sets `WANDB_MODE=disabled`, so no
 account, login, network upload, or external run is created.
