@@ -1,0 +1,38 @@
+# Core dependencies
+torch==2.0.0
+torchvision==0.15.0
+torchaudio==2.0.0
+
+# PyYAML for configuration
+PyYAML==6.0
+
+# Image processing
+Pillow==9.5.0
+scikit-image==0.20.0
+
+# Visualization
+matplotlib==3.7.1
+seaborn==0.12.2
+plotly==5.14.0
+
+# Utilities
+numpy==1.24.3
+scipy==1.10.1
+pandas==2.0.2
+
+# Jupyter notebooks
+jupyter==1.0.0
+jupyterlab==3.6.3
+ipywidgets==8.0.6
+
+# Metrics and evaluation
+scikit-learn==1.2.2
+
+# Logging and monitoring
+tensorboard==2.13.0
+wandb==0.15.0
+
+# Development tools
+black==23.3.0
+flake8==6.0.0
+pytest==7.3.1

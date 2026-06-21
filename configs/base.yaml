@@ -1,0 +1,39 @@
+# Base configuration for experiments
+
+# Model settings
+model:
+  type: "base"
+  pretrained: false
+
+# Training settings
+training:
+  batch_size: 32
+  num_epochs: 100
+  learning_rate: 0.0002
+  beta1: 0.5
+  beta2: 0.999
+  weight_decay: 0.0
+
+# Data settings
+data:
+  image_size: 256
+  num_workers: 4
+  normalize: true
+
+# Optimization settings
+optimizer:
+  type: "adam"
+  lr: 0.0002
+
+# Scheduler settings
+scheduler:
+  type: "linear"
+  start_epoch: 50
+
+# Logging settings
+logging:
+  log_interval: 100
+  save_interval: 1000
+
+# Device settings
+device: "cuda"

@@ -1,0 +1,22 @@
+# SD-Turbo configuration
+
+model:
+  type: "sdturbo"
+  pretrained: true
+  model_name: "stabilityai/sd-turbo"
+
+training:
+  batch_size: 8
+  num_epochs: 50
+  learning_rate: 0.00001
+  weight_decay: 0.0
+
+data:
+  image_size: 512
+  num_workers: 4
+
+# SD-Turbo specific settings
+sdturbo:
+  num_inference_steps: 1
+  guidance_scale: 0.0
+  negative_prompt: ""
