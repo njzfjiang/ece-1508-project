@@ -1,20 +1,17 @@
-"""Evaluation metrics for model assessment."""
-
-# src/eval/metrics.py
-"""
-Evaluation metrics for day-to-night translation.
-- SSIM: Structural similarity (structure preservation)
-- LPIPS: Perceptual similarity (human-aligned quality)
-- CLIP Vision Similarity: Semantic alignment (image-to-image)
-"""
-
+from skimage.metrics import structural_similarity as ssim_sk
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torchvision import transforms
-from skimage.metrics import structural_similarity as ssim_sk
-import lpips
-import clip
-import numpy as np
+
+
+"""Evaluation metrics for day-to-night translation.
+
+- SSIM: structural preservation
+- LPIPS: perceptual similarity
+- CLIP Vision Similarity: image-encoder cosine similarity
+- CMMD: CLIP-feature distributional similarity
+"""
 
 
 class MetricsCalculator:
@@ -28,11 +25,12 @@ class MetricsCalculator:
             device = "cpu"
         self.device = device
 
-        # LPIPS
+        import clip
+        import lpips
+
         self.lpips_model = lpips.LPIPS(net=lpips_backbone).to(device)
         self.lpips_model.eval()
 
-        # CLIP (image encoder only)
         self.clip_model, self.clip_preprocess = clip.load(
             clip_model_name, device=device
         )
@@ -170,6 +168,70 @@ class MetricsCalculator:
 
         return float(np.mean(features))
 
+    def extract_clip_features(self, images: torch.Tensor) -> np.ndarray:
+        """Extract normalized CLIP image features for a CHW or BCHW tensor."""
+        images = self._to_unit_range(self._as_batch(images))
+        features = []
+
+        with torch.no_grad():
+            for image in images:
+                image_pil = transforms.ToPILImage()(image.cpu())
+                processed = self.clip_preprocess(image_pil).unsqueeze(0).to(self.device)
+                embedding = self.clip_model.encode_image(processed)
+                embedding = F.normalize(embedding, p=2, dim=-1)
+                features.append(embedding.cpu().float().numpy()[0])
+
+        return np.stack(features, axis=0)
+
+    @staticmethod
+    def compute_cmmd_from_features(
+        generated_features: np.ndarray,
+        ground_truth_features: np.ndarray,
+        sigma: float | None = None,
+    ) -> float:
+        """Compute squared Gaussian-kernel MMD over CLIP image features."""
+        generated_features = np.asarray(generated_features, dtype=np.float64)
+        ground_truth_features = np.asarray(ground_truth_features, dtype=np.float64)
+        if generated_features.ndim != 2 or ground_truth_features.ndim != 2:
+            raise ValueError("CMMD features must be 2D arrays")
+        if generated_features.shape[1] != ground_truth_features.shape[1]:
+            raise ValueError(
+                "Generated and ground-truth CLIP features must have the same width"
+            )
+        if len(generated_features) == 0 or len(ground_truth_features) == 0:
+            raise ValueError("CMMD requires at least one generated and target feature")
+
+        combined = np.concatenate([generated_features, ground_truth_features], axis=0)
+        if sigma is None:
+            distances = _squared_distances(combined, combined)
+            positive = distances[distances > 0]
+            sigma = float(np.sqrt(np.median(positive))) if positive.size else 1.0
+        if sigma <= 0:
+            raise ValueError("CMMD sigma must be positive")
+
+        gamma = 1.0 / (2.0 * sigma**2)
+        k_xx = np.exp(-gamma * _squared_distances(generated_features, generated_features))
+        k_yy = np.exp(
+            -gamma * _squared_distances(ground_truth_features, ground_truth_features)
+        )
+        k_xy = np.exp(
+            -gamma * _squared_distances(generated_features, ground_truth_features)
+        )
+        return float(k_xx.mean() + k_yy.mean() - 2.0 * k_xy.mean())
+
+    def compute_cmmd(
+        self,
+        generated: torch.Tensor,
+        ground_truth: torch.Tensor,
+        sigma: float | None = None,
+    ) -> float:
+        """Compute CLIP Maximum Mean Discrepancy for two image batches."""
+        generated_features = self.extract_clip_features(generated)
+        ground_truth_features = self.extract_clip_features(ground_truth)
+        return self.compute_cmmd_from_features(
+            generated_features, ground_truth_features, sigma=sigma
+        )
+
     def evaluate_pair(
         self,
         generated: torch.Tensor,
@@ -184,3 +246,10 @@ class MetricsCalculator:
             "lpips": self.compute_lpips(generated, ground_truth),
             "clip_similarity": self.compute_clip_similarity(generated, ground_truth),
         }
+
+
+def _squared_distances(first: np.ndarray, second: np.ndarray) -> np.ndarray:
+    first_norm = np.sum(first * first, axis=1, keepdims=True)
+    second_norm = np.sum(second * second, axis=1, keepdims=True).T
+    distances = first_norm + second_norm - 2.0 * first @ second.T
+    return np.maximum(distances, 0.0)

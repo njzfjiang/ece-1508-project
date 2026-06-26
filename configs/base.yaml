@@ -58,11 +58,14 @@ cyclegan_turbo:
 
 # Evaluation
 eval:
-  metrics: ["ssim", "lpips", "clip_similarity"]
+  metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
+  output_dir: "results/evaluation"
   clip_model: "ViT-B/32"
   lpips_backbone: "alex"  # or "vgg"
   test_samples: 200
   breaking_point_alpha: 0.05
+  bootstrap_iterations: 1000
+  variance_ratio_min: 1.25
 
 # Logging
 logging:

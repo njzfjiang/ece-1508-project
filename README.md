@@ -219,7 +219,45 @@ All active experiment settings live in `configs/base.yaml`. The
 
 ## Evaluation
 
-The reusable metric implementations currently live in `src/eval/metrics.py`.
-The formal evaluation runner is intentionally not scaffolded yet; it will be
-added together with the agreed CMMD protocol and output manifest. Do not treat
-the training smoke-test outputs as final evaluation results.
+Formal evaluation is a post-training step over the held-out paired test set in
+`data/processed/day2night/test/{day,night}`. It does not use the upstream
+training-time eval folders as final results.
+
+Run all formal evaluations after the training checkpoints exist:
+
+```bash
+bash scripts/run_all_evaluations.sh
+```
+
+The runner computes per-sample SSIM, LPIPS, and CLIP Vision cosine similarity,
+then computes run-level CMMD from CLIP image embeddings. Outputs are written
+under `results/evaluation/<model>/<shot>shot/seed<seed>/`:
+
+- `generated/`: generated night images aligned by filename
+- `per_sample_metrics.csv`: per-pair SSIM, LPIPS, and CLIP similarity
+- `summary.json`: aggregate means/stds plus CMMD
+- `manifest.json`: checkpoint, split, metric, and filename metadata
+
+To evaluate an existing generated-image directory without running model
+inference:
+
+```bash
+python src/eval/run_evaluation.py \
+  --model pix2pix \
+  --shot 10 \
+  --seed 1 \
+  --checkpoint results/pix2pix/10shot/seed1/checkpoints/model_5001.pkl \
+  --generated-dir results/evaluation/pix2pix/10shot/seed1/generated
+```
+
+The breaking-point analysis aggregates all `summary.json` files and writes
+`results/evaluation/summary.csv` plus `results/evaluation/breaking_points.json`:
+
+```bash
+python src/eval/analyze_breaking_point.py
+```
+
+Higher is better for SSIM and CLIP similarity; lower is better for LPIPS and
+CMMD. A breaking point is flagged at the lowest shot level where the lower-shot
+run significantly degrades against the next higher shot level and also shows
+increased variance across seeds and test samples.
