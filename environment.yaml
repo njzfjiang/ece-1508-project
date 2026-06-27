@@ -1,19 +1,24 @@
 name: ece-1508
+
 channels:
   - pytorch
   - nvidia
   - conda-forge
+
 dependencies:
   - python=3.10
   - pip>=23
   - setuptools<81
+
+  # PyTorch stack
   - pytorch=2.0.1
   - torchvision=0.15.2
   - torchaudio=2.0.2
   - pytorch-cuda=11.8
-  # PyTorch 2.0.1 expects the Intel JIT symbols shipped before MKL 2024.1.
-  # Without these pins, importing torch can fail with undefined iJIT_NotifyEvent.
-  - mkl=2024.0
-  - intel-openmp=2024.0
+
+  # System libs
+  - mkl<2024
+  - intel-openmp
+
   - pip:
       - -r requirements.txt
