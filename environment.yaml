@@ -18,7 +18,6 @@ dependencies:
 
   # System libs
   - mkl<2024
-  - intel-openmp
 
   - pip:
       - -r requirements.txt
