@@ -86,6 +86,7 @@ data/
 ```
 
 ## Running Experiments
+Download pre-trained img2img-turbo model *night2day.pkl* from the [website](https://www.cs.cmu.edu/~img2img-turbo/models/) and place it under `src\train`
 
 Validate all 18 commands and dataset views without starting GPU training:
 

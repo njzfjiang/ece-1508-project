@@ -6,7 +6,6 @@ from torchvision import transforms
 
 
 """Evaluation metrics for day-to-night translation.
-
 - SSIM: structural preservation
 - LPIPS: perceptual similarity
 - CLIP Vision Similarity: image-encoder cosine similarity
@@ -210,7 +209,9 @@ class MetricsCalculator:
             raise ValueError("CMMD sigma must be positive")
 
         gamma = 1.0 / (2.0 * sigma**2)
-        k_xx = np.exp(-gamma * _squared_distances(generated_features, generated_features))
+        k_xx = np.exp(
+            -gamma * _squared_distances(generated_features, generated_features)
+        )
         k_yy = np.exp(
             -gamma * _squared_distances(ground_truth_features, ground_truth_features)
         )
@@ -239,14 +240,14 @@ class MetricsCalculator:
     ) -> dict:
         """
         Evaluate a single (generated, ground_truth) pair.
-        Returns dict with SSIM, LPIPS, CLIP similarity.
+        Returns dict with SSIM, LPIPS, CLIP similarity, and CMMD.
         """
         return {
+            "cmmd": self.compute_cmmd(generated, ground_truth),
             "ssim": self.compute_ssim(generated, ground_truth),
             "lpips": self.compute_lpips(generated, ground_truth),
             "clip_similarity": self.compute_clip_similarity(generated, ground_truth),
         }
-
 
 def _squared_distances(first: np.ndarray, second: np.ndarray) -> np.ndarray:
     first_norm = np.sum(first * first, axis=1, keepdims=True)

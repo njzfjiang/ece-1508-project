@@ -1,4 +1,4 @@
-"""Prepare DarkDriving data and create img2img-turbo few-shot training views + shared test set."""
+"""Prepare DarkDriving dataset for img2img-turbo (night → day)."""
 
 import argparse
 import json
@@ -12,154 +12,108 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--raw_dir", type=Path, required=True)
-    parser.add_argument(
-        "--output_root",
-        type=Path,
-        default=Path("data/processed/img2img_turbo"),
-    )
-    parser.add_argument(
-        "--test_dir",
-        type=Path,
-        default=Path("data/processed/test"),
-    )
-    parser.add_argument("--shots", type=int, nargs="+", default=[10, 20, 50])
-    parser.add_argument("--num_seeds", type=int, default=3)
-    parser.add_argument(
-        "--mode",
-        choices=["auto", "hardlink", "symlink", "copy"],
-        default="auto",
-    )
-    parser.add_argument("--source_prompt", default="a driving scene during the day")
-    parser.add_argument("--target_prompt", default="a driving scene at night")
-    parser.add_argument("--overwrite", action="store_true")
+    p = argparse.ArgumentParser()
 
-    return parser.parse_args()
+    p.add_argument("--raw_dir", type=Path, required=True)
+    p.add_argument("--output_root", type=Path, default=Path("data/processed/img2img_turbo"))
+    p.add_argument("--test_dir", type=Path, default=Path("data/processed/test"))
+
+    p.add_argument("--shots", type=int, nargs="+", default=[10, 20, 50])
+    p.add_argument("--num_seeds", type=int, default=3)
+
+    p.add_argument("--mode", choices=["auto", "hardlink", "symlink", "copy"], default="auto")
+    p.add_argument("--overwrite", action="store_true")
+
+    p.add_argument("--source_prompt", default="a driving scene at night")
+    p.add_argument("--target_prompt", default="a driving scene during the day")
+
+    return p.parse_args()
 
 
-def link_or_copy(source: Path, destination: Path, mode: str = "auto") -> str:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def link_or_copy(src: Path, dst: Path, mode="auto") -> str:
+    dst.parent.mkdir(parents=True, exist_ok=True)
 
-    if not source.exists():
-        raise FileNotFoundError(f"Missing source file: {source}")
-    if destination.exists() or destination.is_symlink():
+    if not src.exists():
+        raise FileNotFoundError(src)
+
+    if dst.exists() or dst.is_symlink():
         return "existing"
 
     methods = [mode] if mode != "auto" else ["hardlink", "symlink", "copy"]
     errors = []
 
-    for method in methods:
+    for m in methods:
         try:
-            if method == "hardlink":
-                os.link(source, destination)
-            elif method == "symlink":
-                destination.symlink_to(source.resolve())
-            elif method == "copy":
-                shutil.copy2(source, destination)
-            return method
-        except OSError as exc:
-            errors.append(f"{method}: {exc}")
+            if m == "hardlink":
+                os.link(src, dst)
+            elif m == "symlink":
+                dst.symlink_to(src.resolve())
+            else:
+                shutil.copy2(src, dst)
+            return m
+        except OSError as e:
+            errors.append(str(e))
 
-    raise OSError(f"Failed to materialize {source}: {'; '.join(errors)}")
+    raise OSError("; ".join(errors))
 
 
-def get_image_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
+def get_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
     if not day_dir.is_dir() or not night_dir.is_dir():
-        raise FileNotFoundError(f"Missing directory: {day_dir} or {night_dir}")
+        raise FileNotFoundError(f"Missing: {day_dir} or {night_dir}")
 
-    day_files = {
-        p.name: p
-        for p in day_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
-    }
-    night_files = {
-        p.name: p
-        for p in night_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
-    }
+    day = {f.name: f for f in day_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS}
+    night = {f.name: f for f in night_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS}
 
-    names = sorted(day_files.keys() & night_files.keys())
-    if not names:
-        raise ValueError("No matched day/night pairs found")
-    return [(day_files[n], night_files[n]) for n in names]
+    names = sorted(day.keys() & night.keys())
+    return [(night[n], day[n]) for n in names]
 
 
-def materialize_pairs(pairs, day_dst, night_dst, mode):
-    for d, n in pairs:
-        for src, dst_root in ((d, day_dst), (n, night_dst)):
-            link_or_copy(src, dst_root / src.name, mode)
+def materialize(pairs, night_dst, day_dst, mode):
+    for n, d in pairs:
+        link_or_copy(n, night_dst / n.name, mode)
+        link_or_copy(d, day_dst / d.name, mode)
 
 
-def save_prompts(pairs, out_path, prompt):
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    data = {d.name: prompt for d, _ in pairs}
-    out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+def save_prompts(pairs, path: Path, prompt: str, base_dir: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    
+    data = [
+        {
+            "source": str(n.name),
+            "target": str(d.name),
+            "prompt": prompt,
+        }
+        for n, d in pairs
+    ]
+
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def build_global_test(test_pairs, test_dir, mode):
-    materialize_pairs(
-        test_pairs,
-        test_dir / "test_A",
-        test_dir / "test_B",
-        mode,
-    )
+def add_prompts(pairs, path: Path, src_prompt: str, tgt_prompt: str, base_dir: Path):
+    save_prompts(pairs, path, tgt_prompt, base_dir)
 
-    (test_dir / "test_prompts.json").write_text(
-        json.dumps(
-            {p.name: "a driving scene at night" for p, _ in test_pairs}, indent=2
-        ),
-        encoding="utf-8",
-    )
+    path.parent.joinpath("fixed_prompt_a.txt").write_text(src_prompt + "\n")
+    path.parent.joinpath("fixed_prompt_b.txt").write_text(tgt_prompt + "\n")
 
 
-def build_train_split(
-    train_pairs,
-    output_root,
-    shot,
-    seed,
-    source_prompt,
-    target_prompt,
-    mode,
-    overwrite,
-):
-    dataset_dir = output_root / f"{shot}shot" / f"seed{seed}"
+def build_test(pairs, test_dir, src_prompt, tgt_prompt, mode):
+    materialize(pairs, test_dir / "test_A", test_dir / "test_B", mode)
+    add_prompts(pairs, test_dir / "test_prompts.json", src_prompt, tgt_prompt, test_dir)
 
-    if dataset_dir.exists():
+
+def build_train(pairs, out_root, shot, seed, src_prompt, tgt_prompt, mode, overwrite):
+    out = out_root / f"{shot}shot" / f"seed{seed}"
+
+    if out.exists():
         if overwrite:
-            shutil.rmtree(dataset_dir)
+            shutil.rmtree(out)
         else:
             return False
 
-    sampled = random.Random(seed).sample(train_pairs, shot)
+    sampled = random.Random(seed).sample(pairs, shot)
 
-    materialize_pairs(
-        sampled,
-        dataset_dir / "train_A",
-        dataset_dir / "train_B",
-        mode,
-    )
-
-    save_prompts(sampled, dataset_dir / "train_prompts.json", target_prompt)
-
-    (dataset_dir / "fixed_prompt_a.txt").write_text(source_prompt + "\n")
-    (dataset_dir / "fixed_prompt_b.txt").write_text(target_prompt + "\n")
-
-    (dataset_dir / "manifest.json").write_text(
-        json.dumps(
-            {
-                "shot": shot,
-                "seed": seed,
-                "train_pairs": len(sampled),
-                "source_prompt": source_prompt,
-                "target_prompt": target_prompt,
-                "train_day": [d.name for d, _ in sampled],
-                "train_night": [n.name for _, n in sampled],
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    materialize(sampled, out / "train_A", out / "train_B", mode)
+    add_prompts(sampled, out / "train_prompts.json", src_prompt, tgt_prompt, out)
 
     return True
 
@@ -172,26 +126,28 @@ def main():
     test_day = args.raw_dir / "test" / "day"
     test_night = args.raw_dir / "test" / "night"
 
-    train_pairs = get_image_pairs(train_day, train_night)
-    test_pairs = get_image_pairs(test_day, test_night)
+    train_pairs = get_pairs(train_day, train_night)
+    test_pairs = get_pairs(test_day, test_night)
 
-    if args.test_dir.exists():
-        if args.overwrite:
-            shutil.rmtree(args.test_dir)
-        else:
-            print(f"Skipped existing global test set: {args.test_dir}")
+    if args.test_dir.exists() and args.overwrite:
+        shutil.rmtree(args.test_dir)
 
-    if not args.test_dir.exists():
-        args.test_dir.mkdir(parents=True, exist_ok=True)
-        build_global_test(test_pairs, args.test_dir, args.mode)
-        print(f"Saved global test set to: {args.test_dir}")
+    args.test_dir.mkdir(parents=True, exist_ok=True)
+
+    build_test(
+        test_pairs,
+        args.test_dir,
+        args.source_prompt,
+        args.target_prompt,
+        args.mode,
+    )
 
     for shot in args.shots:
         if shot > len(train_pairs):
             raise ValueError(f"{shot}-shot exceeds dataset size")
 
         for seed in range(1, args.num_seeds + 1):
-            created = build_train_split(
+            created = build_train(
                 train_pairs,
                 args.output_root,
                 shot,
@@ -201,10 +157,8 @@ def main():
                 args.mode,
                 args.overwrite,
             )
-            if created:
-                print(f"Built {shot}-shot seed {seed}")
-            else:
-                print(f"Skipped existing {shot}-shot seed {seed}")
+
+            print(f"{'Built' if created else 'Skipped'} {shot}-shot seed {seed}")
 
 
 if __name__ == "__main__":

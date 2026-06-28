@@ -1,0 +1,2 @@
+# This file is currently empty and serves as a placeholder for future implementation of unpaired cycleGAN training logic.
+# You could reference the paired training logic in model_paired.py and adapt it for unpaired training as needed.

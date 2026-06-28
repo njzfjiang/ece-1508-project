@@ -6,32 +6,9 @@
 # Dataset
 data:
   root: "data/processed"
-  img2img_turbo_root: "data/processed/img2img_turbo"
-  dataset_name: "DarkDriving"
   image_size: 512
   batch_size: 4
   num_workers: 4
-  shot_levels: [10, 20, 50]
-  num_seeds: 3
-  val_split: 0.1
-
-# Model - SD-Turbo backbone
-model:
-  backbone: "stabilityai/sd-turbo"
-  dtype: "fp16"  # fp16 or fp32
-  enable_xformers: true
-
-# Training - shared
-training:
-  num_epochs: 50
-  max_train_steps: null  # set an integer to cap every run by optimizer steps
-  learning_rate: 1e-4
-  lr_scheduler: "constant"
-  gradient_accumulation_steps: 1
-  gradient_checkpointing: false
-  mixed_precision: "fp16"
-  save_every: 500
-  eval_every: 200
 
 # Training - pix2pix-turbo (paired / SD-Turbo+LoRA)
 pix2pix_turbo:
