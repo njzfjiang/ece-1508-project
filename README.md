@@ -65,9 +65,11 @@ data/
 ├── processed/
 │
 │   ├── test/                              # global fixed test set
-│   │   ├── test_A/                        # day images
-│   │   ├── test_B/                        # night images
-│   │   └── test_prompts.json              # fixed prompts for evaluation
+│   │   ├── test_A/                        # night images
+│   │   ├── test_B/                        # day images
+│   │   ├── fixed_prompt_a.txt             # fixed prompts for unpaired model
+│   │   ├── fixed_prompt_b.txt             
+│   │   └── test_prompts.json              # fixed prompts for paired model
 │
 │   ├── 10shot/
 │   │   ├── seed1/
@@ -76,7 +78,9 @@ data/
 │   │   │   ├── train_prompts.json
 │   │   │   ├── fixed_prompt_a.txt
 │   │   │   ├── fixed_prompt_b.txt
-│   │   │   └── manifest.json
+│   │   │   ├── test_A/
+│   │   │   ├── test_B/
+│   │   │   └── ...
 │   │   ├── seed2/
 │   │   └── seed3/
 │   │

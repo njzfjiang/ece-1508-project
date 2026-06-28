@@ -96,14 +96,12 @@ def add_prompts(pairs, path: Path, src_prompt: str, tgt_prompt: str, base_dir: P
     path.parent.joinpath("fixed_prompt_b.txt").write_text(tgt_prompt + "\n")
 
 
-def build_test(pairs, test_dir, src_prompt, tgt_prompt, mode):
-    materialize(pairs, test_dir / "test_A", test_dir / "test_B", mode)
-    add_prompts(pairs, test_dir / "test_prompts.json", src_prompt, tgt_prompt, test_dir)
+def build_test(pairs, out_dir, src_prompt, tgt_prompt, mode):
+    materialize(pairs, out_dir / "test_A", out_dir / "test_B", mode)
+    add_prompts(pairs, out_dir / "test_prompts.json", src_prompt, tgt_prompt, out_dir)
 
 
-def build_train(pairs, out_root, shot, seed, src_prompt, tgt_prompt, mode, overwrite):
-    out = out_root / f"{shot}shot" / f"seed{seed}"
-
+def build_train(pairs, out, shot, seed, src_prompt, tgt_prompt, mode, overwrite):
     if out.exists():
         if overwrite:
             shutil.rmtree(out)
@@ -141,21 +139,37 @@ def main():
         args.target_prompt,
         args.mode,
     )
+    
+    rng = random.Random(42)
+    val_pairs = rng.sample(train_pairs, min(100, len(train_pairs)))
+    remaining_train = [p for p in train_pairs if p not in val_pairs]
+    
 
     for shot in args.shots:
-        if shot > len(train_pairs):
+        if shot > len(remaining_train):
             raise ValueError(f"{shot}-shot exceeds dataset size")
 
         for seed in range(1, args.num_seeds + 1):
+            out_dir = args.output_root / f"{shot}shot" / f"seed{seed}"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
             created = build_train(
-                train_pairs,
-                args.output_root,
+                remaining_train,
+                out_dir,
                 shot,
                 seed,
                 args.source_prompt,
                 args.target_prompt,
                 args.mode,
                 args.overwrite,
+            )
+            
+            build_test(
+                val_pairs,
+                out_dir,
+                args.source_prompt,
+                args.target_prompt,
+                args.mode,
             )
 
             print(f"{'Built' if created else 'Skipped'} {shot}-shot seed {seed}")
