@@ -19,7 +19,7 @@ def parse_args():
     p.add_argument("--test_dir", type=Path, default=Path("data/processed/test"))
 
     p.add_argument("--shots", type=int, nargs="+", default=[10, 20, 50])
-    p.add_argument("--num_seeds", type=int, default=3)
+    p.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
 
     p.add_argument("--mode", choices=["auto", "hardlink", "symlink", "copy"], default="auto")
     p.add_argument("--overwrite", action="store_true")
@@ -149,7 +149,7 @@ def main():
         if shot > len(remaining_train):
             raise ValueError(f"{shot}-shot exceeds dataset size")
 
-        for seed in range(1, args.num_seeds + 1):
+        for seed in args.seeds:
             out_dir = args.output_root / f"{shot}shot" / f"seed{seed}"
             out_dir.mkdir(parents=True, exist_ok=True)
             

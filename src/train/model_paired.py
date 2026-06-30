@@ -1,8 +1,27 @@
+import argparse
 import subprocess
 from pathlib import Path
 import yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--shots",
+        nargs="+",
+        type=int,
+        default=[10, 20, 50],
+        help="List of shot counts for few-shot training",
+    )
+    parser.add_argument(
+        "--seeds",
+        nargs="+",
+        type=int,
+        default=[1, 2, 3],
+        help="List of random seeds for few-shot training",
+    )
+    return parser.parse_args()
 
 def load_config(config_path: Path):
     with open(config_path, "r") as f:
@@ -14,7 +33,7 @@ def run(cmd):
     subprocess.run(cmd, check=True)
 
 def train_model(shots, seeds, model_path, dataset_folder, output_dir, script_path):
-    cfg = load_config(PROJECT_ROOT / "config" / "base.yaml")["training"]
+    cfg = load_config(PROJECT_ROOT / "configs" / "base.yaml")["training"]
 
     for shot in shots:
         for seed in seeds:
@@ -73,12 +92,13 @@ def test_model(shots, seeds, testset_folder, script_path, output_dir, output_bas
             
     
 def main():
+    args = parse_args()
     model_path = PROJECT_ROOT / "src" / "train" / "night2day.pkl"
     dataset_folder = PROJECT_ROOT / "data" / "processed"
     output_base = PROJECT_ROOT / "outputs" / "pix2pix_turbo"
     pix2pix_turbo_repo = PROJECT_ROOT / "external" / "img2img-turbo"
-    shots = [10, 20, 50]
-    seeds = [1, 2, 3]
+    shots = args.shots
+    seeds = args.seeds
     
     # train
     validate_output_dir = output_base / "train"
