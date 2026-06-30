@@ -65,8 +65,8 @@ data/
 ├── processed/
 │
 │   ├── test/                              # global fixed test set
-│   │   ├── test_A/                        # night images
-│   │   ├── test_B/                        # day images
+│   │   ├── test_A/                        # day images (model input)
+│   │   ├── test_B/                        # night images (target)
 │   │   ├── fixed_prompt_a.txt             # fixed prompts for unpaired model
 │   │   ├── fixed_prompt_b.txt             
 │   │   └── test_prompts.json              # fixed prompts for paired model
@@ -91,7 +91,7 @@ data/
 
 ## Running Experiments
 
-This script launches training and evaluation for both models using the default experimental configuration of 10, 20, and 50 shots with seeds 1, 2, and 3. To override the default settings, specify custom values using the `--shots` and `--seeds` command-line arguments.
+This script launches the configured training runs using 10, 20, and 50 shots with seeds 1, 2, and 3. Formal held-out evaluation is a separate post-training step. To override the defaults, specify `--shots` and `--seeds`.
 ```bash
 python scripts/run_experiments.py
 ```
@@ -99,14 +99,18 @@ python scripts/run_experiments.py
 ## Evaluation
 
 Formal evaluation is a post-training step over the held-out paired test set in
-`data/processed/day2night/test/{day,night}`. It does not use the upstream
-training-time eval folders as final results.
+`data/processed/test/{test_A,test_B}`, where `test_A` contains day inputs and
+`test_B` contains filename-aligned night targets. It does not use upstream
+training-time validation folders as final results.
 
 Run all formal evaluations after the training checkpoints exist:
 
 ```bash
 bash scripts/run_all_evaluations.sh
 ```
+
+The wrapper evaluates pix2pix by default. Once CycleGAN training is implemented,
+run both with `MODELS="pix2pix cyclegan" bash scripts/run_all_evaluations.sh`.
 
 The runner computes per-sample SSIM, LPIPS, and CLIP Vision cosine similarity,
 then computes run-level CMMD from CLIP image embeddings. Outputs are written
@@ -125,18 +129,17 @@ python src/eval/run_evaluation.py \
   --model pix2pix \
   --shot 10 \
   --seed 1 \
-  --checkpoint results/pix2pix/10shot/seed1/checkpoints/model_5001.pkl \
   --generated-dir results/evaluation/pix2pix/10shot/seed1/generated
 ```
 
-The breaking-point analysis aggregates all `summary.json` files and writes
-`results/evaluation/summary.csv` plus `results/evaluation/breaking_points.json`:
+The summarizer treats each seed as one independent run and writes per-run and
+cross-seed tables:
 
 ```bash
-python src/eval/analyze_breaking_point.py
+python src/eval/summarize_evaluations.py
 ```
 
+Outputs are `results/evaluation/runs.csv`, `aggregate.csv`, and `aggregate.json`.
 Higher is better for SSIM and CLIP similarity; lower is better for LPIPS and
-CMMD. A breaking point is flagged at the lowest shot level where the lower-shot
-run significantly degrades against the next higher shot level and also shows
-increased variance across seeds and test samples.
+CMMD. With only three seeds, the project reports descriptive mean and standard
+deviation rather than an overstated significance-based breaking point.

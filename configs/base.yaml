@@ -42,13 +42,15 @@ cyclegan_turbo:
 # Evaluation
 eval:
   metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
+  test_root: "data/processed/test"
   output_dir: "results/evaluation"
+  checkpoint_roots:
+    pix2pix: "outputs/pix2pix_turbo/train"
+    cyclegan: "outputs/cyclegan_turbo/train"
   clip_model: "ViT-B/32"
   lpips_backbone: "alex"  # or "vgg"
   test_samples: 200
-  breaking_point_alpha: 0.05
-  bootstrap_iterations: 1000
-  variance_ratio_min: 1.25
+  cmmd_sigma: 1.0
 
 # Logging
 logging:

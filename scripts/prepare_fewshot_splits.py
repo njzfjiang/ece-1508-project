@@ -1,4 +1,4 @@
-"""Prepare DarkDriving dataset for img2img-turbo (night → day)."""
+"""Prepare DarkDriving dataset for img2img-turbo (day to night)."""
 
 import argparse
 import json
@@ -15,13 +15,17 @@ def parse_args():
     p = argparse.ArgumentParser()
 
     p.add_argument("--raw_dir", type=Path, required=True)
-    p.add_argument("--output_root", type=Path, default=Path("data/processed/img2img_turbo"))
+    p.add_argument(
+        "--output_root", type=Path, default=Path("data/processed/img2img_turbo")
+    )
     p.add_argument("--test_dir", type=Path, default=Path("data/processed/test"))
 
     p.add_argument("--shots", type=int, nargs="+", default=[10, 20, 50])
     p.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
 
-    p.add_argument("--mode", choices=["auto", "hardlink", "symlink", "copy"], default="auto")
+    p.add_argument(
+        "--mode", choices=["auto", "hardlink", "symlink", "copy"], default="auto"
+    )
     p.add_argument("--overwrite", action="store_true")
 
     p.add_argument("--source_prompt", default="a driving scene during the day")
@@ -62,7 +66,9 @@ def get_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
         raise FileNotFoundError(f"Missing: {day_dir} or {night_dir}")
 
     day = {f.name: f for f in day_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS}
-    night = {f.name: f for f in night_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS}
+    night = {
+        f.name: f for f in night_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS
+    }
 
     names = sorted(day.keys() & night.keys())
     return [(day[n], night[n]) for n in names]
@@ -74,15 +80,15 @@ def materialize(pairs, day_dst, night_dst, mode):
         link_or_copy(n, night_dst / n.name, mode)
 
 
-def save_prompts(pairs, path: Path, prompt: str, base_dir: Path):
+def save_prompts(pairs, path: Path, prompt: str):
     path.parent.mkdir(parents=True, exist_ok=True)
-    
-    data = { path.name: prompt for _, path in pairs }
+
+    data = {day.name: prompt for day, _ in pairs}
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def add_prompts(pairs, path: Path, src_prompt: str, tgt_prompt: str, base_dir: Path):
-    save_prompts(pairs, path, tgt_prompt, base_dir)
+def add_prompts(pairs, path: Path, src_prompt: str, tgt_prompt: str):
+    save_prompts(pairs, path, tgt_prompt)
 
     path.parent.joinpath("fixed_prompt_a.txt").write_text(src_prompt + "\n")
     path.parent.joinpath("fixed_prompt_b.txt").write_text(tgt_prompt + "\n")
@@ -90,7 +96,7 @@ def add_prompts(pairs, path: Path, src_prompt: str, tgt_prompt: str, base_dir: P
 
 def build_test(pairs, out_dir, src_prompt, tgt_prompt, mode):
     materialize(pairs, out_dir / "test_A", out_dir / "test_B", mode)
-    add_prompts(pairs, out_dir / "test_prompts.json", src_prompt, tgt_prompt, out_dir)
+    add_prompts(pairs, out_dir / "test_prompts.json", src_prompt, tgt_prompt)
 
 
 def build_train(pairs, out, shot, seed, src_prompt, tgt_prompt, mode, overwrite):
@@ -103,7 +109,7 @@ def build_train(pairs, out, shot, seed, src_prompt, tgt_prompt, mode, overwrite)
     sampled = random.Random(seed).sample(pairs, shot)
 
     materialize(sampled, out / "train_A", out / "train_B", mode)
-    add_prompts(sampled, out / "train_prompts.json", src_prompt, tgt_prompt, out)
+    add_prompts(sampled, out / "train_prompts.json", src_prompt, tgt_prompt)
 
     return True
 
@@ -129,11 +135,10 @@ def main():
         args.target_prompt,
         args.mode,
     )
-    
+
     rng = random.Random(42)
     val_pairs = rng.sample(train_pairs, min(100, len(train_pairs)))
     remaining_train = [p for p in train_pairs if p not in val_pairs]
-    
 
     for shot in args.shots:
         if shot > len(remaining_train):
@@ -141,7 +146,7 @@ def main():
 
         for seed in args.seeds:
             out_dir = args.output_root / f"{shot}shot" / f"seed{seed}"
-            
+
             created = build_train(
                 remaining_train,
                 out_dir,
@@ -152,7 +157,7 @@ def main():
                 args.mode,
                 args.overwrite,
             )
-            
+
             build_test(
                 val_pairs,
                 out_dir,
