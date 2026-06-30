@@ -10,6 +10,11 @@ data:
   batch_size: 4
   num_workers: 4
 
+training:
+  resolution: 512
+  batch_size: 4
+  viz_freq: 25 # frequency of visualization during training
+
 # Training - pix2pix-turbo (paired / SD-Turbo+LoRA)
 pix2pix_turbo:
   lora_rank_unet: 8

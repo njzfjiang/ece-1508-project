@@ -95,4 +95,4 @@ runs/
 lightning_logs/
 external/
 
-data
+src/train/night2day.pkl
