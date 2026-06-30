@@ -48,7 +48,7 @@ python scripts/setup.py
 
 The setup script clones the official `img2img-turbo` repository, pins it to
 commit `86f54146590ffb4543c8cf85b5a36657da670924`, installs the required
-dependencies, and prepares the few-shot training views. Run `python scripts/setup.py --skip-install` if the environment is already installed.
+dependencies, and prepares the few-shot training views. Run `python scripts/setup.py --skip-install` if the environment is already installed. To override the default settings, specify custom values using the `--shots` and `--seeds` command-line arguments.
 
 **Output Structure:**
 ```
@@ -78,7 +78,7 @@ data/
 │   │   │   ├── train_prompts.json
 │   │   │   ├── fixed_prompt_a.txt
 │   │   │   ├── fixed_prompt_b.txt
-│   │   │   ├── test_A/
+│   │   │   ├── test_A/                     # validation dataset
 │   │   │   ├── test_B/
 │   │   │   └── ...
 │   │   ├── seed2/
@@ -92,27 +92,10 @@ data/
 ## Running Experiments
 Download pre-trained img2img-turbo model *night2day.pkl* from the [website](https://www.cs.cmu.edu/~img2img-turbo/models/) and place it under `src\train`
 
-Validate all 18 commands and dataset views without starting GPU training:
-
+This script launches training and evaluation for both models using the default experimental configuration of 10, 20, and 50 shots with seeds 1, 2, and 3. To override the default settings, specify custom values using the `--shots` and `--seeds` command-line arguments.
 ```bash
-DRY_RUN=1 bash scripts/run_all_experiments.sh
+python scripts/run_experiments.py
 ```
-
-Run all experiments sequentially on GPU 0:
-
-```bash
-bash scripts/run_all_experiments.sh
-```
-
-Select another GPU with `GPU_ID=1`. To run a specific model:
-
-```bash
-python src/train/run_experiment.py --model pix2pix --shots 10 --seeds 1 --gpu 0
-python src/train/run_experiment.py --model cyclegan --shots 20 --seeds 2 --gpu 0
-```
-
-All active experiment settings live in `configs/base.yaml`. The
-`pix2pix_turbo` and `cyclegan_turbo` sections contain model-specific options.
 
 ## Evaluation
 
