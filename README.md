@@ -91,10 +91,39 @@ data/
 
 ## Running Experiments
 
-This script launches the configured training runs using 10, 20, and 50 shots with seeds 1, 2, and 3. Formal held-out evaluation is a separate post-training step. To override the defaults, specify `--shots` and `--seeds`.
+This script launches the implemented pix2pix training runs using 10, 20, and 50
+shots with seeds 1, 2, and 3. CycleGAN is intentionally excluded until
+`src/train/model_unpaired.py` is implemented. Formal held-out evaluation is a
+separate post-training step. To override the defaults, specify `--shots` and
+`--seeds`.
 ```bash
 python scripts/run_experiments.py
 ```
+
+`configs/base.yaml` controls the upstream pix2pix command, including batch size,
+workers, learning rate, training/checkpoint steps, precision, xformers, gradient
+checkpointing, LoRA ranks, loss weights, image preparation, validation FID, and
+W&B logging. When `logging.use_wandb` is false, the launcher sets
+`WANDB_MODE=disabled` while retaining the upstream-supported `wandb` reporter.
+
+For a cheap first VPS smoke test, temporarily use one shot/seed and conservative
+settings:
+
+```yaml
+training:
+  batch_size: 1
+  max_train_steps: 2
+  checkpointing_steps: 2
+  mixed_precision: "no"
+  num_samples_eval: 1
+
+pix2pix_turbo:
+  track_val_fid: false
+```
+
+Run it with `python scripts/run_experiments.py --shots 10 --seeds 1`. Switch to
+`mixed_precision: "fp16"` only after applying
+`patches/img2img-turbo-pix2pix-fp16.patch` to the vendored upstream tree.
 
 ## Evaluation
 
