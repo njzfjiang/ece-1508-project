@@ -94,5 +94,3 @@ wandb/
 runs/
 lightning_logs/
 external/
-
-src/train/night2day.pkl

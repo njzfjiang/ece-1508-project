@@ -90,7 +90,6 @@ data/
 ```
 
 ## Running Experiments
-Download pre-trained img2img-turbo model *night2day.pkl* from the [website](https://www.cs.cmu.edu/~img2img-turbo/models/) and place it under `src\train`
 
 This script launches training and evaluation for both models using the default experimental configuration of 10, 20, and 50 shots with seeds 1, 2, and 3. To override the default settings, specify custom values using the `--shots` and `--seeds` command-line arguments.
 ```bash

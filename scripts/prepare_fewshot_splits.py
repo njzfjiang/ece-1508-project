@@ -24,8 +24,8 @@ def parse_args():
     p.add_argument("--mode", choices=["auto", "hardlink", "symlink", "copy"], default="auto")
     p.add_argument("--overwrite", action="store_true")
 
-    p.add_argument("--source_prompt", default="a driving scene at night")
-    p.add_argument("--target_prompt", default="a driving scene during the day")
+    p.add_argument("--source_prompt", default="a driving scene during the day")
+    p.add_argument("--target_prompt", default="a driving scene during the night")
 
     return p.parse_args()
 
@@ -65,27 +65,19 @@ def get_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
     night = {f.name: f for f in night_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS}
 
     names = sorted(day.keys() & night.keys())
-    return [(night[n], day[n]) for n in names]
+    return [(day[n], night[n]) for n in names]
 
 
-def materialize(pairs, night_dst, day_dst, mode):
-    for n, d in pairs:
-        link_or_copy(n, night_dst / n.name, mode)
+def materialize(pairs, day_dst, night_dst, mode):
+    for d, n in pairs:
         link_or_copy(d, day_dst / d.name, mode)
+        link_or_copy(n, night_dst / n.name, mode)
 
 
 def save_prompts(pairs, path: Path, prompt: str, base_dir: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     
-    data = [
-        {
-            "source": str(n.name),
-            "target": str(d.name),
-            "prompt": prompt,
-        }
-        for n, d in pairs
-    ]
-
+    data = { path.name: prompt for _, path in pairs }
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
@@ -130,8 +122,6 @@ def main():
     if args.test_dir.exists() and args.overwrite:
         shutil.rmtree(args.test_dir)
 
-    args.test_dir.mkdir(parents=True, exist_ok=True)
-
     build_test(
         test_pairs,
         args.test_dir,
@@ -151,7 +141,6 @@ def main():
 
         for seed in args.seeds:
             out_dir = args.output_root / f"{shot}shot" / f"seed{seed}"
-            out_dir.mkdir(parents=True, exist_ok=True)
             
             created = build_train(
                 remaining_train,

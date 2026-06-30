@@ -32,7 +32,7 @@ def run(cmd):
     print("\n[CMD]", " ".join(cmd))
     subprocess.run(cmd, check=True)
 
-def train_model(shots, seeds, model_path, dataset_folder, output_dir, script_path):
+def train_model(shots, seeds, dataset_folder, output_dir, script_path):
     cfg = load_config(PROJECT_ROOT / "configs" / "base.yaml")["training"]
 
     for shot in shots:
@@ -48,7 +48,7 @@ def train_model(shots, seeds, model_path, dataset_folder, output_dir, script_pat
 
             cmd = [
                 "accelerate", "launch", str(script_path),
-                "--pretrained_model_name_or_path", str(model_path),
+                "--pretrained_model_name_or_path", str(cfg["model"]),
                 "--output_dir", str(run_output_dir),
                 "--dataset_folder", str(dataset_dir),
                 "--resolution", str(cfg["resolution"]),
@@ -56,6 +56,7 @@ def train_model(shots, seeds, model_path, dataset_folder, output_dir, script_pat
                 "--enable_xformers_memory_efficient_attention",
                 "--viz_freq", str(cfg["viz_freq"]),
                 "--track_val_fid",
+                "--seed", str(seed),
                 "--report_to", "wandb",
                 "--tracker_project_name", "pix2pix_turbo_darkdriving",
             ]
@@ -93,7 +94,6 @@ def test_model(shots, seeds, testset_folder, script_path, output_dir, output_bas
     
 def main():
     args = parse_args()
-    model_path = PROJECT_ROOT / "src" / "train" / "night2day.pkl"
     dataset_folder = PROJECT_ROOT / "data" / "processed"
     output_base = PROJECT_ROOT / "outputs" / "pix2pix_turbo"
     pix2pix_turbo_repo = PROJECT_ROOT / "external" / "img2img-turbo"
@@ -102,16 +102,13 @@ def main():
     
     # train
     validate_output_dir = output_base / "train"
-    validate_output_dir.mkdir(parents=True, exist_ok=True)
     train_script_path = pix2pix_turbo_repo / "src" / "train_pix2pix_turbo.py"
-    train_model(shots, seeds, model_path, dataset_folder, validate_output_dir, train_script_path)
+    train_model(shots, seeds, dataset_folder, validate_output_dir, train_script_path)
     print("\nModel training completed check the outputs/pix2pix_turbo/train directory for results.")
     
     # test
     testset_folder = dataset_folder / "test"
-    testset_folder.mkdir(parents=True, exist_ok=True)
     test_output_dir = output_base / "test"
-    test_output_dir.mkdir(parents=True, exist_ok=True)
     test_script_path = pix2pix_turbo_repo / "src" / "inference_paired.py"
     test_model(shots, seeds, testset_folder, test_script_path, test_output_dir, output_base)
     print("\nModel testing completed check the outputs/pix2pix_turbo/test directory for results.")
