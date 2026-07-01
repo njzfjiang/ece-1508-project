@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -14,6 +15,7 @@ DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "base.yaml"
 REQUIRED_VENDOR_MARKERS = (
     "max_train_steps is the authoritative stopping condition",
     "Keep trainable parameters in FP32",
+    "Optimizer parameters must be unique by identity",
 )
 
 
@@ -56,8 +58,9 @@ def build_train_command(
     training = config["training"]
     pix2pix = config["pix2pix_turbo"]
     command = [
-        "accelerate",
-        "launch",
+        sys.executable,
+        "-m",
+        "accelerate.commands.launch",
         str(script_path),
         "--pretrained_model_name_or_path",
         str(training["model"]),

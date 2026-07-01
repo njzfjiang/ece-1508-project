@@ -1,0 +1,25 @@
+diff --git a/src/cyclegan_turbo.py b/src/cyclegan_turbo.py
+--- a/src/cyclegan_turbo.py
++++ b/src/cyclegan_turbo.py
+@@ -236,6 +236,8 @@ class CycleGAN_Turbo(torch.nn.Module):
+         params_gen = params_gen + list(vae_b2a.decoder.skip_conv_2.parameters())
+         params_gen = params_gen + list(vae_b2a.decoder.skip_conv_3.parameters())
+         params_gen = params_gen + list(vae_b2a.decoder.skip_conv_4.parameters())
++        # LoRA-wrapped skip convolutions expose adapter parameters twice above.
++        params_gen = list({id(param): param for param in params_gen}.values())
+         return params_gen
+ 
+     def forward(self, x_t, direction=None, caption=None, caption_emb=None):
+diff --git a/src/train_pix2pix_turbo.py b/src/train_pix2pix_turbo.py
+--- a/src/train_pix2pix_turbo.py
++++ b/src/train_pix2pix_turbo.py
+@@ -93,6 +93,8 @@ def main(args):
+     layers_to_opt = layers_to_opt + list(net_pix2pix.vae.decoder.skip_conv_1.parameters()) + \
+         list(net_pix2pix.vae.decoder.skip_conv_2.parameters()) + \
+         list(net_pix2pix.vae.decoder.skip_conv_3.parameters()) + \
+         list(net_pix2pix.vae.decoder.skip_conv_4.parameters())
++    # Optimizer parameters must be unique by identity.
++    layers_to_opt = list({id(param): param for param in layers_to_opt}.values())
+ 
+     optimizer = torch.optim.AdamW(layers_to_opt, lr=args.learning_rate,
+         betas=(args.adam_beta1, args.adam_beta2), weight_decay=args.adam_weight_decay,

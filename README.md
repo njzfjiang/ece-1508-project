@@ -60,9 +60,11 @@ only the pinned and patched vendor tree:
 python scripts/setup.py --skip-install --skip-prepare
 ```
 
-Both setup modes idempotently apply the FP16 safety fix and the upstream
-training-loop fix that makes `max_train_steps` stop exactly and saves the final
-checkpoint.
+Both setup modes idempotently apply the FP16 safety fix, the upstream
+training-loop fix that makes `max_train_steps` stop exactly, and optimizer
+parameter de-duplication. Training is launched through the active Python
+interpreter, so a copied environment cannot silently reuse another environment's
+`accelerate` console script.
 
 **Output Structure:**
 ```

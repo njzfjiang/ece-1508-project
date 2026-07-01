@@ -17,6 +17,7 @@ UPSTREAM_COMMIT = "86f54146590ffb4543c8cf85b5a36657da670924"
 PATCHES = [
     PROJECT_ROOT / "patches" / "img2img-turbo-training-loop.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-pix2pix-fp16.patch",
+    PROJECT_ROOT / "patches" / "img2img-turbo-optimizer-params.patch",
 ]
 REQUIRED_SUBDIRS = ["train/day", "train/night", "test/day", "test/night"]
 
