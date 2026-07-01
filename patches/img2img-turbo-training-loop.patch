@@ -1,0 +1,62 @@
+diff --git a/src/train_pix2pix_turbo.py b/src/train_pix2pix_turbo.py
+index 39c738b..8d8abdf 100644
+--- a/src/train_pix2pix_turbo.py
++++ b/src/train_pix2pix_turbo.py
+@@ -141,8 +141,8 @@ def main(args):
+         tracker_config = dict(vars(args))
+         accelerator.init_trackers(args.tracker_project_name, config=tracker_config)
+ 
+-    progress_bar = tqdm(range(0, args.max_train_steps), initial=0, desc="Steps",
+-        disable=not accelerator.is_local_main_process,)
++    progress_bar = tqdm(total=args.max_train_steps, initial=0, desc="Steps",
++        disable=not accelerator.is_local_main_process,)
+ 
+     # turn off eff. attn for the discriminator
+     for name, module in net_disc.named_modules():
+@@ -164,7 +164,7 @@ def main(args):
+ 
+     # start the training loop
+     global_step = 0
+-    for epoch in range(0, args.num_training_epochs):
++    while global_step < args.max_train_steps:
+         for step, batch in enumerate(dl_train):
+             l_acc = [net_pix2pix, net_disc]
+             with accelerator.accumulate(*l_acc):
+@@ -241,7 +241,7 @@ def main(args):
+                     progress_bar.set_postfix(**logs)
+ 
+                     # viz some images
+-                    if global_step % args.viz_freq == 1:
++                    if global_step % args.viz_freq == 0:
+                         log_dict = {
+                             "train/source": [wandb.Image(x_src[idx].float().detach().cpu(), caption=f"idx={idx}") for idx in range(B)],
+                             "train/target": [wandb.Image(x_tgt[idx].float().detach().cpu(), caption=f"idx={idx}") for idx in range(B)],
+@@ -251,12 +251,12 @@ def main(args):
+                             logs[k] = log_dict[k]
+ 
+                     # checkpoint the model
+-                    if global_step % args.checkpointing_steps == 1:
++                    if global_step % args.checkpointing_steps == 0 or global_step >= args.max_train_steps:
+                         outf = os.path.join(args.output_dir, "checkpoints", f"model_{global_step}.pkl")
+                         accelerator.unwrap_model(net_pix2pix).save_model(outf)
+ 
+                     # compute validation set FID, L2, LPIPS, CLIP-SIM
+-                    if global_step % args.eval_freq == 1:
++                    if global_step % args.eval_freq == 0:
+                         l_l2, l_lpips, l_clipsim = [], [], []
+                         if args.track_val_fid:
+                             os.makedirs(os.path.join(args.output_dir, "eval", f"fid_{global_step}"), exist_ok=True)
+@@ -300,6 +300,13 @@ def main(args):
+                         gc.collect()
+                         torch.cuda.empty_cache()
+                     accelerator.log(logs, step=global_step)
++
++            # max_train_steps is the authoritative stopping condition.
++            if global_step >= args.max_train_steps:
++                break
++
++    accelerator.wait_for_everyone()
++    accelerator.end_training()
+ 
+ 
+ if __name__ == "__main__":

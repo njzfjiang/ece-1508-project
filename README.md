@@ -43,12 +43,26 @@ Python 3.10 and CUDA 11.8 are the reproducible baseline. Conda is recommended:
 ```bash
 conda env create -f environment.yaml
 conda activate ece-1508
-python scripts/setup.py
+python scripts/setup.py --skip-install
 ```
 
 The setup script clones the official `img2img-turbo` repository, pins it to
 commit `86f54146590ffb4543c8cf85b5a36657da670924`, installs the required
-dependencies, and prepares the few-shot training views. Run `python scripts/setup.py --skip-install` if the environment is already installed. To override the default settings, specify custom values using the `--shots` and `--seeds` command-line arguments.
+compatibility patches, and prepares the few-shot training views. The Conda
+environment already installs `requirements.txt`, so `--skip-install` avoids a
+duplicate pip install. To prepare only selected views, pass `--shots` and
+`--seeds`.
+
+When a preprocessed subset was uploaded instead of the full raw dataset, set up
+only the pinned and patched vendor tree:
+
+```bash
+python scripts/setup.py --skip-install --skip-prepare
+```
+
+Both setup modes idempotently apply the FP16 safety fix and the upstream
+training-loop fix that makes `max_train_steps` stop exactly and saves the final
+checkpoint.
 
 **Output Structure:**
 ```
@@ -106,24 +120,21 @@ checkpointing, LoRA ranks, loss weights, image preparation, validation FID, and
 W&B logging. When `logging.use_wandb` is false, the launcher sets
 `WANDB_MODE=disabled` while retaining the upstream-supported `wandb` reporter.
 
-For a cheap first VPS smoke test, temporarily use one shot/seed and conservative
-settings:
+For a cheap first VPS smoke test, use the dedicated config and one run:
 
-```yaml
-training:
-  batch_size: 1
-  max_train_steps: 2
-  checkpointing_steps: 2
-  mixed_precision: "no"
-  num_samples_eval: 1
-
-pix2pix_turbo:
-  track_val_fid: false
+```bash
+python scripts/run_experiments.py \
+  --config configs/smoke.yaml \
+  --shots 10 \
+  --seeds 1
 ```
 
-Run it with `python scripts/run_experiments.py --shots 10 --seeds 1`. Switch to
-`mixed_precision: "fp16"` only after applying
-`patches/img2img-turbo-pix2pix-fp16.patch` to the vendored upstream tree.
+The run must stop at exactly two steps and write
+`outputs/smoke/pix2pix_turbo/train/10shot/seed1/checkpoints/model_2.pkl`.
+
+The launcher refuses to start when that run directory already contains checkpoints,
+because automatic resume is not supported. Move or remove an earlier smoke run before
+rerunning it; this also prevents evaluation from selecting a stale checkpoint.
 
 ## Evaluation
 

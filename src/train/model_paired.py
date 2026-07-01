@@ -11,6 +11,10 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "base.yaml"
+REQUIRED_VENDOR_MARKERS = (
+    "max_train_steps is the authoritative stopping condition",
+    "Keep trainable parameters in FP32",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,6 +124,17 @@ def training_environment(config: dict) -> dict[str, str]:
     return environment
 
 
+def validate_vendor_script(script_path: Path) -> None:
+    source = script_path.read_text(encoding="utf-8")
+    missing = [marker for marker in REQUIRED_VENDOR_MARKERS if marker not in source]
+    if missing:
+        raise RuntimeError(
+            "Vendored img2img-turbo is missing required compatibility patches. "
+            "Run: python scripts/setup.py --skip-install --skip-prepare. "
+            f"Missing markers: {missing}"
+        )
+
+
 def train_model(
     shots: list[int],
     seeds: list[int],
@@ -135,6 +150,14 @@ def train_model(
                 raise FileNotFoundError(f"Missing dataset: {dataset_dir}")
 
             output_dir = output_root / f"{shot}shot" / f"seed{seed}"
+            existing_checkpoints = list(
+                (output_dir / "checkpoints").glob("model_*.pkl")
+            )
+            if existing_checkpoints:
+                raise FileExistsError(
+                    "Refusing to mix a new run with existing checkpoints in "
+                    f"{output_dir}. Move the old run or choose another output_dir."
+                )
             output_dir.mkdir(parents=True, exist_ok=True)
             command = build_train_command(
                 script_path=script_path,
@@ -162,6 +185,7 @@ def main() -> int:
     )
     if not script_path.is_file():
         raise FileNotFoundError(f"Vendored training script not found: {script_path}")
+    validate_vendor_script(script_path)
 
     train_model(
         shots=args.shots,
