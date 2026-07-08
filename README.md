@@ -21,44 +21,6 @@ We ask: Under extreme data scarcity (10, 20, and 50 training pairs), which learn
 - `results/`: Results and figures from experiments
 - `docs/`: Documentation
 
-## Setup
-
-Python 3.10 and CUDA 11.8 are the reproducible baseline. Conda is recommended:
-
-```bash
-conda env create -f environment.yaml
-conda activate ece-1508
-bash scripts/setup_img2img_turbo.sh
-```
-
-The setup script pins the official `img2img-turbo` checkout to commit
-`86f54146590ffb4543c8cf85b5a36657da670924`. Set `SKIP_INSTALL=1` if the
-environment is already installed.
-
-It also applies a small compatibility patch to the pinned pix2pix trainer:
-trainable parameters remain as FP32 master weights while Accelerate autocast
-handles FP16 forward passes. This avoids GradScaler's
-`Attempting to unscale FP16 gradients` failure.
-
-The Conda environment also pins MKL/Intel OpenMP to 2024.0. PyTorch 2.0.1 can
-otherwise fail during import with an undefined `iJIT_NotifyEvent` symbol when
-resolved against MKL 2024.1 or newer.
-
-`setuptools` is pinned below 81 because the upstream vision-aided discriminator
-loads `gdown`, which still imports the legacy `pkg_resources` module.
-
-The pinned upstream training scripts initialize a Weights & Biases tracker.
-When `logging.use_wandb: false`, the launcher sets `WANDB_MODE=disabled`, so no
-account, login, network upload, or external run is created.
-
-The Colab notebook intentionally uses 256x256 images, batch size 1, and
-gradient checkpointing so the complete training path fits on a 16 GB T4. This
-is a systems smoke test only; the formal experiment configuration remains
-512x512 in `configs/base.yaml` and should run on a larger persistent GPU.
-
-For a pip-based environment, first install a compatible PyTorch 2.0.1/CUDA
-build, then run `python -m pip install -r requirements.txt`.
-
 ## Data Download
 
 ### DarkDriving Dataset (ICRA 2026)
@@ -74,160 +36,123 @@ The dataset is not automatically downloaded due to license and file size.
    unzip darkdriving_lle.zip -d data/raw/
    ```
 
-## Data Preparation
+## Setup
 
-Before running experiments, you need to prepare the dataset and generate few-shot splits:
-
-The data pipeline has two deliberate layers:
-
-```text
-data/raw/darkdriving_lle
-    -> prepare_fewshot_splits.py
-data/processed/day2night + data/processed/splits
-    -> prepare_img2img_turbo_data.py
-data/processed/img2img_turbo/<shot>shot/seed<seed>
-```
-
-The first layer is the canonical, model-independent dataset and reproducible
-split definition. The second is a lightweight adapter for the official
-img2img-turbo loaders. Do not replace the first layer with model-specific
-preprocessing.
-
-You can run the helper script from any working directory; it resolves paths relative to the repository:
+Python 3.10 and CUDA 11.8 are the reproducible baseline. Conda is recommended:
 
 ```bash
-bash scripts/download_data.sh
+conda env create -f environment.yaml
+conda activate ece-1508
+python scripts/setup.py --skip-install
 ```
 
-If processed output already exists, the script asks before rebuilding it.
+The setup script clones the official `img2img-turbo` repository, pins it to
+commit `86f54146590ffb4543c8cf85b5a36657da670924`, installs the required
+compatibility patches, and prepares the few-shot training views. The Conda
+environment already installs `requirements.txt`, so `--skip-install` avoids a
+duplicate pip install. To prepare only selected views, pass `--shots` and
+`--seeds`.
 
-### Step 1: Prepare Full Dataset
-
-Organize your raw DarkDriving dataset and run the preprocessing script:
+When a preprocessed subset was uploaded instead of the full raw dataset, set up
+only the pinned and patched vendor tree:
 
 ```bash
-python scripts/prepare_fewshot_splits.py \
-  --raw_dir data/raw/darkdriving_lle \
-  --output_dir data/processed \
-  --shot_levels 10 20 50 \
-  --num_seeds 3 \
-  --val_split 0.1 \
-  --copy_mode
+python scripts/setup.py --skip-install --skip-prepare
 ```
 
-`--copy_mode` is recommended on Windows. Omit it on systems where symlinks are available.
-
-**Parameters:**
-- `--raw_dir`: Path to raw dataset (should contain `train/day`, `train/night`, `test/day`, `test/night`)
-- `--output_dir`: Output directory for processed data (default: `./data/processed`)
-- `--shot_levels`: Few-shot levels to generate (default: [10, 20, 50])
-- `--num_seeds`: Number of random seeds per shot level (default: 3)
-- `--copy_mode`: Use this flag to copy files instead of symlinking
-- `--val_split`: Validation split ratio (default: 0.1)
-- `--overwrite`: Safely remove existing `day2night/` and `splits/` outputs before rebuilding
-
-Seed directory names match the actual random seeds: `seed1` uses random seed `1`, and so on.
+Both setup modes idempotently apply the FP16 safety fix, the upstream
+training-loop fix that makes `max_train_steps` stop exactly, and optimizer
+parameter de-duplication. Training is launched through the active Python
+interpreter, so a copied environment cannot silently reuse another environment's
+`accelerate` console script.
 
 **Output Structure:**
 ```
-data/processed/
-├── day2night/
-│   ├── train/day/
-│   ├── train/night/
-│   ├── val/day/
-│   ├── val/night/
-│   ├── test/day/
-│   └── test/night/
-└── splits/fewshot/
-    ├── 10shot/seed1/split.json
-    ├── 10shot/seed2/split.json
-    ├── 20shot/seed1/split.json
-    └── ...
+data/
+├── raw/
+│   └── darkdriving_lle/
+│       ├── train/
+│       │   ├── day/
+│       │   └── night/
+│       └── test/
+│           ├── day/
+│           └── night/
+│
+├── processed/
+│
+│   ├── test/                              # global fixed test set
+│   │   ├── test_A/                        # day images (model input)
+│   │   ├── test_B/                        # night images (target)
+│   │   ├── fixed_prompt_a.txt             # fixed prompts for unpaired model
+│   │   ├── fixed_prompt_b.txt             
+│   │   └── test_prompts.json              # fixed prompts for paired model
+│
+│   ├── 10shot/
+│   │   ├── seed1/
+│   │   │   ├── train_A/
+│   │   │   ├── train_B/
+│   │   │   ├── train_prompts.json
+│   │   │   ├── fixed_prompt_a.txt
+│   │   │   ├── fixed_prompt_b.txt
+│   │   │   ├── test_A/                     # validation dataset
+│   │   │   ├── test_B/
+│   │   │   └── ...
+│   │   ├── seed2/
+│   │   └── seed3/
+│   │
+│   ├── 20shot/
+│   └── 50shot/
+...
 ```
-
-### Step 2: Verify Data Preparation
-
-Check if the preprocessing was successful:
-```bash
-ls -la data/processed/day2night/train/
-ls -la data/processed/splits/fewshot/
-```
-
-### Step 3: Prepare Official Training Views
-
-The experiment launcher creates these views automatically. To create all of
-them ahead of time:
-
-```bash
-python scripts/prepare_img2img_turbo_data.py
-```
-
-Each `shot/seed` view contains the upstream `train_A`, `train_B`, `test_A`,
-`test_B`, prompt JSON, and fixed-prompt files. Files use hardlinks when
-possible, so the views do not duplicate image contents.
-
-The same adapter supports both models; no separate CycleGAN data script is
-needed. Both models receive the same selected day and night samples for a fair
-few-shot comparison. The official CycleGAN-Turbo loader samples the two
-domains independently during training, making its batches unpaired.
-
-`src/data/dataset.py` remains available as the project-native paired loader for
-EDA, evaluation, and custom experiments. Official training does not use it.
-
-### Optional: Package a Reduced Colab Dataset
-
-Build a deterministic smoke-test archive without uploading the full raw
-dataset:
-
-```bash
-python scripts/package_darkdriving_smoke.py \
-  --shot 10 \
-  --seed 1 \
-  --test-pairs 50 \
-  --output artifacts/darkdriving_smoke.tar.gz
-```
-
-The archive contains only the selected training pairs, a fixed random sample
-of paired test images, the matching split JSON, and a manifest under the
-canonical `data/processed/` hierarchy. A `.sha256` sidecar is generated for
-upload verification. Upload both files to the Drive location configured in the
-Colab notebook.
 
 ## Running Experiments
 
-Validate all 18 commands and dataset views without starting GPU training:
-
+This script launches the implemented pix2pix training runs using 10, 20, and 50
+shots with seeds 1, 2, and 3. CycleGAN is intentionally excluded until
+`src/train/model_unpaired.py` is implemented. Formal held-out evaluation is a
+separate post-training step. To override the defaults, specify `--shots` and
+`--seeds`.
 ```bash
-DRY_RUN=1 bash scripts/run_all_experiments.sh
+python scripts/run_experiments.py
 ```
 
-Run all experiments sequentially on GPU 0:
+`configs/base.yaml` controls the upstream pix2pix command, including batch size,
+workers, learning rate, training/checkpoint steps, precision, xformers, gradient
+checkpointing, LoRA ranks, loss weights, image preparation, validation FID, and
+W&B logging. When `logging.use_wandb` is false, the launcher sets
+`WANDB_MODE=disabled` while retaining the upstream-supported `wandb` reporter.
+
+For a cheap first VPS smoke test, use the dedicated config and one run:
 
 ```bash
-bash scripts/run_all_experiments.sh
+python scripts/run_experiments.py \
+  --config configs/smoke.yaml \
+  --shots 10 \
+  --seeds 1
 ```
 
-Select another GPU with `GPU_ID=1`. To run a specific model:
+The run must stop at exactly two steps and write
+`outputs/smoke/pix2pix_turbo/train/10shot/seed1/checkpoints/model_2.pkl`.
 
-```bash
-python src/train/run_experiment.py --model pix2pix --shots 10 --seeds 1 --gpu 0
-python src/train/run_experiment.py --model cyclegan --shots 20 --seeds 2 --gpu 0
-```
-
-All active experiment settings live in `configs/base.yaml`. The
-`pix2pix_turbo` and `cyclegan_turbo` sections contain model-specific options.
+The launcher refuses to start when that run directory already contains checkpoints,
+because automatic resume is not supported. Move or remove an earlier smoke run before
+rerunning it; this also prevents evaluation from selecting a stale checkpoint.
 
 ## Evaluation
 
 Formal evaluation is a post-training step over the held-out paired test set in
-`data/processed/day2night/test/{day,night}`. It does not use the upstream
-training-time eval folders as final results.
+`data/processed/test/{test_A,test_B}`, where `test_A` contains day inputs and
+`test_B` contains filename-aligned night targets. It does not use upstream
+training-time validation folders as final results.
 
 Run all formal evaluations after the training checkpoints exist:
 
 ```bash
 bash scripts/run_all_evaluations.sh
 ```
+
+The wrapper evaluates pix2pix by default. Once CycleGAN training is implemented,
+run both with `MODELS="pix2pix cyclegan" bash scripts/run_all_evaluations.sh`.
 
 The runner computes per-sample SSIM, LPIPS, and CLIP Vision cosine similarity,
 then computes run-level CMMD from CLIP image embeddings. Outputs are written
@@ -246,18 +171,17 @@ python src/eval/run_evaluation.py \
   --model pix2pix \
   --shot 10 \
   --seed 1 \
-  --checkpoint results/pix2pix/10shot/seed1/checkpoints/model_5001.pkl \
   --generated-dir results/evaluation/pix2pix/10shot/seed1/generated
 ```
 
-The breaking-point analysis aggregates all `summary.json` files and writes
-`results/evaluation/summary.csv` plus `results/evaluation/breaking_points.json`:
+The summarizer treats each seed as one independent run and writes per-run and
+cross-seed tables:
 
 ```bash
-python src/eval/analyze_breaking_point.py
+python src/eval/summarize_evaluations.py
 ```
 
+Outputs are `results/evaluation/runs.csv`, `aggregate.csv`, and `aggregate.json`.
 Higher is better for SSIM and CLIP similarity; lower is better for LPIPS and
-CMMD. A breaking point is flagged at the lowest shot level where the lower-shot
-run significantly degrades against the next higher shot level and also shows
-increased variance across seeds and test samples.
+CMMD. With only three seeds, the project reports descriptive mean and standard
+deviation rather than an overstated significance-based breaking point.

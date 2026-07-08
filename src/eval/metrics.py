@@ -4,9 +4,7 @@ import torch
 import torch.nn.functional as F
 from torchvision import transforms
 
-
 """Evaluation metrics for day-to-night translation.
-
 - SSIM: structural preservation
 - LPIPS: perceptual similarity
 - CLIP Vision Similarity: image-encoder cosine similarity
@@ -20,21 +18,34 @@ class MetricsCalculator:
         device: str = "cuda",
         lpips_backbone: str = "alex",
         clip_model_name: str = "ViT-B/32",
+        requested_metrics: set[str] | None = None,
     ):
         if device.startswith("cuda") and not torch.cuda.is_available():
             device = "cpu"
         self.device = device
+        self.requested_metrics = requested_metrics or {
+            "ssim",
+            "lpips",
+            "clip_similarity",
+            "cmmd",
+        }
+        self.lpips_model = None
+        self.clip_model = None
+        self.clip_preprocess = None
 
-        import clip
-        import lpips
+        if "lpips" in self.requested_metrics:
+            import lpips
 
-        self.lpips_model = lpips.LPIPS(net=lpips_backbone).to(device)
-        self.lpips_model.eval()
+            self.lpips_model = lpips.LPIPS(net=lpips_backbone).to(device)
+            self.lpips_model.eval()
 
-        self.clip_model, self.clip_preprocess = clip.load(
-            clip_model_name, device=device
-        )
-        self.clip_model.eval()
+        if self.requested_metrics & {"clip_similarity", "cmmd"}:
+            import clip
+
+            self.clip_model, self.clip_preprocess = clip.load(
+                clip_model_name, device=device
+            )
+            self.clip_model.eval()
 
     @staticmethod
     def _as_batch(images: torch.Tensor) -> torch.Tensor:
@@ -106,6 +117,8 @@ class MetricsCalculator:
         Returns:
             LPIPS distance (float, lower is better)
         """
+        if self.lpips_model is None:
+            raise RuntimeError("LPIPS was not initialized for this evaluation")
         img1 = self._as_batch(img1)
         img2 = self._as_batch(img2)
         self._validate_pair(img1, img2)
@@ -131,45 +144,26 @@ class MetricsCalculator:
         Returns:
             Cosine similarity (float, higher is better)
         """
-        img1 = self._to_unit_range(self._as_batch(img1))
-        img2 = self._to_unit_range(self._as_batch(img2))
-        self._validate_pair(img1, img2)
+        img1_features = self.extract_clip_features(img1)
+        img2_features = self.extract_clip_features(img2)
+        return self.clip_similarity_from_features(img1_features, img2_features)
 
-        # Convert to PIL for CLIP preprocess
-        # CLIP expects RGB images normalized with its own mean/std
-        batch_size = img1.shape[0]
-        features = []
-
-        with torch.no_grad():
-            for i in range(batch_size):
-                # To PIL
-                img1_pil = transforms.ToPILImage()(img1[i].cpu())
-                img2_pil = transforms.ToPILImage()(img2[i].cpu())
-
-                # Preprocess
-                img1_processed = (
-                    self.clip_preprocess(img1_pil).unsqueeze(0).to(self.device)
-                )
-                img2_processed = (
-                    self.clip_preprocess(img2_pil).unsqueeze(0).to(self.device)
-                )
-
-                # Encode
-                emb1 = self.clip_model.encode_image(img1_processed)
-                emb2 = self.clip_model.encode_image(img2_processed)
-
-                # Normalize
-                emb1 = F.normalize(emb1, p=2, dim=-1)
-                emb2 = F.normalize(emb2, p=2, dim=-1)
-
-                # Similarity
-                sim = (emb1 @ emb2.T).item()
-                features.append(sim)
-
-        return float(np.mean(features))
+    @staticmethod
+    def clip_similarity_from_features(
+        img1_features: np.ndarray,
+        img2_features: np.ndarray,
+    ) -> float:
+        """Compute mean cosine similarity from normalized CLIP features."""
+        img1_features = np.asarray(img1_features, dtype=np.float64)
+        img2_features = np.asarray(img2_features, dtype=np.float64)
+        if img1_features.shape != img2_features.shape or img1_features.ndim != 2:
+            raise ValueError("CLIP feature arrays must have the same 2D shape")
+        return float(np.mean(np.sum(img1_features * img2_features, axis=1)))
 
     def extract_clip_features(self, images: torch.Tensor) -> np.ndarray:
         """Extract normalized CLIP image features for a CHW or BCHW tensor."""
+        if self.clip_model is None or self.clip_preprocess is None:
+            raise RuntimeError("CLIP was not initialized for this evaluation")
         images = self._to_unit_range(self._as_batch(images))
         features = []
 
@@ -210,7 +204,9 @@ class MetricsCalculator:
             raise ValueError("CMMD sigma must be positive")
 
         gamma = 1.0 / (2.0 * sigma**2)
-        k_xx = np.exp(-gamma * _squared_distances(generated_features, generated_features))
+        k_xx = np.exp(
+            -gamma * _squared_distances(generated_features, generated_features)
+        )
         k_yy = np.exp(
             -gamma * _squared_distances(ground_truth_features, ground_truth_features)
         )
@@ -239,9 +235,10 @@ class MetricsCalculator:
     ) -> dict:
         """
         Evaluate a single (generated, ground_truth) pair.
-        Returns dict with SSIM, LPIPS, CLIP similarity.
+        Returns dict with SSIM, LPIPS, CLIP similarity, and CMMD.
         """
         return {
+            "cmmd": self.compute_cmmd(generated, ground_truth),
             "ssim": self.compute_ssim(generated, ground_truth),
             "lpips": self.compute_lpips(generated, ground_truth),
             "clip_similarity": self.compute_clip_similarity(generated, ground_truth),

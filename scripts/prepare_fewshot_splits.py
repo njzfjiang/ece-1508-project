@@ -1,398 +1,172 @@
-# scripts/prepare_fewshot_splits.py
-"""
-DarkDriving Dataset Preprocessing Script
+"""Prepare DarkDriving dataset for img2img-turbo (day to night)."""
 
-Raw DarkDriving dataset structure (after download):
-  DarkDriving/
-    train/
-      day/
-        frame_0001.jpg
-        frame_0002.jpg
-        ...
-      night/
-        frame_0001.jpg
-        frame_0002.jpg
-        ...
-    test/
-      day/
-        ...
-      night/
-        ...
-
-Output structure (for this project):
-  data/processed/
-    day2night/
-      train/
-        day/     # symlinks or copies of train/day
-        night/   # symlinks or copies of train/night
-      test/
-        day/
-        night/
-      val/
-        day/
-        night/
-    splits/
-      fewshot/
-        10shot/seed1/
-          split.json
-          train_day.txt
-          train_night.txt
-        ...
-"""
-
+import argparse
 import json
+import os
 import random
 import shutil
-import argparse
 from pathlib import Path
 from typing import List, Tuple
 
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Preprocess DarkDriving dataset")
-    parser.add_argument(
-        "--raw_dir",
-        type=str,
-        required=True,
-        help="Path to raw DarkDriving dataset (containing train/ and test/)",
+    p = argparse.ArgumentParser()
+
+    p.add_argument("--raw_dir", type=Path, required=True)
+    p.add_argument(
+        "--output_root", type=Path, default=Path("data/processed/img2img_turbo")
     )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="./data/processed",
-        help="Output directory for processed data",
+    p.add_argument("--test_dir", type=Path, default=Path("data/processed/test"))
+
+    p.add_argument("--shots", type=int, nargs="+", default=[10, 20, 50])
+    p.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
+
+    p.add_argument(
+        "--mode", choices=["auto", "hardlink", "symlink", "copy"], default="auto"
     )
-    parser.add_argument(
-        "--shot_levels",
-        type=int,
-        nargs="+",
-        default=[10, 20, 50],
-        help="Few-shot levels to generate",
-    )
-    parser.add_argument(
-        "--num_seeds", type=int, default=3, help="Number of random seeds per shot level"
-    )
-    parser.add_argument(
-        "--copy_mode",
-        action="store_true",
-        help="Copy files instead of symlinking (use if symlinks not supported)",
-    )
-    parser.add_argument(
-        "--val_split",
-        type=float,
-        default=0.1,
-        help="Validation split ratio from training set",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Remove existing processed dataset and split outputs before rebuilding",
-    )
-    return parser.parse_args()
+    p.add_argument("--overwrite", action="store_true")
+
+    p.add_argument("--source_prompt", default="a driving scene during the day")
+    p.add_argument("--target_prompt", default="a driving scene during the night")
+
+    return p.parse_args()
 
 
-def reset_output(output_dir: Path):
-    """Remove only the directories managed by this script."""
-    for managed_dir in (
-        output_dir / "day2night",
-        output_dir / "splits",
-        output_dir / "img2img_turbo",
-    ):
-        if managed_dir.exists():
-            shutil.rmtree(managed_dir)
-
-
-def ensure_output_is_empty(output_dir: Path):
-    """Refuse to mix a new split with files from an earlier preprocessing run."""
-    existing = [
-        path
-        for managed_dir in (
-            output_dir / "day2night",
-            output_dir / "splits",
-            output_dir / "img2img_turbo",
-        )
-        if managed_dir.exists()
-        for path in managed_dir.iterdir()
-    ]
-    if existing:
-        raise FileExistsError(
-            f"Processed output already exists under {output_dir}. "
-            "Re-run with --overwrite to rebuild it safely."
-        )
-
-
-def create_directory_structure(base_dir: Path):
-    """Create the standard directory structure for the project."""
-    dirs = [
-        base_dir / "day2night" / "train" / "day",
-        base_dir / "day2night" / "train" / "night",
-        base_dir / "day2night" / "val" / "day",
-        base_dir / "day2night" / "val" / "night",
-        base_dir / "day2night" / "test" / "day",
-        base_dir / "day2night" / "test" / "night",
-        base_dir / "splits" / "fewshot",
-    ]
-    for d in dirs:
-        d.mkdir(parents=True, exist_ok=True)
-    return dirs
-
-
-def get_image_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
-    """
-    Get paired (day, night) images by matching filename.
-    """
-    if not day_dir.exists() or not night_dir.exists():
-        raise FileNotFoundError(
-            f"Day or night directory not found: {day_dir} or {night_dir}"
-        )
-
-    day_files = {
-        f.name: f
-        for f in day_dir.iterdir()
-        if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
-    }
-    night_files = {
-        f.name: f
-        for f in night_dir.iterdir()
-        if f.suffix.lower() in [".jpg", ".jpeg", ".png"]
-    }
-
-    if not day_files or not night_files:
-        raise ValueError(f"No image files found in {day_dir} or {night_dir}")
-
-    shared_names = sorted(day_files.keys() & night_files.keys())
-    if len(shared_names) != len(day_files) or len(shared_names) != len(night_files):
-        print("\n⚠️  WARNING: Day/night filenames do not match exactly!")
-        print(f"   Day images: {len(day_files)}")
-        print(f"   Night images: {len(night_files)}")
-        print(f"   Using {len(shared_names)} filename-matched pairs\n")
-
-    if not shared_names:
-        raise ValueError(
-            f"No matching day/night filenames found in {day_dir} and {night_dir}"
-        )
-
-    return [(day_files[name], night_files[name]) for name in shared_names]
-
-
-def copy_or_link(src: Path, dst: Path, copy_mode: bool = False):
-    """Copy or symlink a file."""
-    if dst.exists():
-        return
+def link_or_copy(src: Path, dst: Path, mode="auto") -> str:
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if copy_mode:
-        shutil.copy2(src, dst)
-    else:
-        dst.symlink_to(src.resolve())
+
+    if not src.exists():
+        raise FileNotFoundError(src)
+
+    if dst.exists() or dst.is_symlink():
+        return "existing"
+
+    methods = [mode] if mode != "auto" else ["hardlink", "symlink", "copy"]
+    errors = []
+
+    for m in methods:
+        try:
+            if m == "hardlink":
+                os.link(src, dst)
+            elif m == "symlink":
+                dst.symlink_to(src.resolve())
+            else:
+                shutil.copy2(src, dst)
+            return m
+        except OSError as e:
+            errors.append(str(e))
+
+    raise OSError("; ".join(errors))
 
 
-def prepare_full_dataset(
-    raw_dir: Path, output_dir: Path, copy_mode: bool = False, val_split: float = 0.1
-):
-    """
-    Prepare the full day2night dataset from raw DarkDriving.
-    Splits train into train/val.
-    """
-    raw_train_day = raw_dir / "train" / "day"
-    raw_train_night = raw_dir / "train" / "night"
-    raw_test_day = raw_dir / "test" / "day"
-    raw_test_night = raw_dir / "test" / "night"
+def get_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
+    if not day_dir.is_dir() or not night_dir.is_dir():
+        raise FileNotFoundError(f"Missing: {day_dir} or {night_dir}")
 
-    # Get all training pairs
-    train_pairs = get_image_pairs(raw_train_day, raw_train_night)
-    print(f"Found {len(train_pairs)} training pairs")
-
-    # Shuffle and split train/val
-    random.seed(42)
-    random.shuffle(train_pairs)
-    val_size = int(len(train_pairs) * val_split)
-    val_pairs = train_pairs[:val_size]
-    train_pairs = train_pairs[val_size:]
-    print(f"Train: {len(train_pairs)}, Val: {len(val_pairs)}")
-
-    # Copy/link training pairs
-    for day_path, night_path in train_pairs:
-        copy_or_link(
-            day_path,
-            output_dir / "day2night" / "train" / "day" / day_path.name,
-            copy_mode,
-        )
-        copy_or_link(
-            night_path,
-            output_dir / "day2night" / "train" / "night" / night_path.name,
-            copy_mode,
-        )
-
-    # Copy/link validation pairs
-    for day_path, night_path in val_pairs:
-        copy_or_link(
-            day_path,
-            output_dir / "day2night" / "val" / "day" / day_path.name,
-            copy_mode,
-        )
-        copy_or_link(
-            night_path,
-            output_dir / "day2night" / "val" / "night" / night_path.name,
-            copy_mode,
-        )
-
-    # Copy/link test pairs
-    test_pairs = get_image_pairs(raw_test_day, raw_test_night)
-    print(f"Found {len(test_pairs)} test pairs")
-    for day_path, night_path in test_pairs:
-        copy_or_link(
-            day_path,
-            output_dir / "day2night" / "test" / "day" / day_path.name,
-            copy_mode,
-        )
-        copy_or_link(
-            night_path,
-            output_dir / "day2night" / "test" / "night" / night_path.name,
-            copy_mode,
-        )
-
-    return train_pairs, val_pairs, test_pairs
-
-
-def generate_fewshot_splits(
-    train_pairs: List[Tuple[Path, Path]],
-    output_dir: Path,
-    shot_levels: List[int],
-    num_seeds: int = 3,
-):
-    """
-    Generate few-shot splits for each shot level and seed.
-    Each split is saved as a JSON file containing day and night file lists.
-    """
-    splits_dir = output_dir / "splits" / "fewshot"
-
-    for shot in shot_levels:
-        if shot > len(train_pairs):
-            raise ValueError(
-                f"Requested {shot}-shot split, but only {len(train_pairs)} training pairs are available"
-            )
-
-        for seed in range(1, num_seeds + 1):
-            rng = random.Random(seed)
-            # Sample shot pairs from training set
-            sampled_indices = rng.sample(range(len(train_pairs)), shot)
-            sampled_pairs = [train_pairs[i] for i in sampled_indices]
-
-            # Create split directory
-            split_dir = splits_dir / f"{shot}shot" / f"seed{seed}"
-            split_dir.mkdir(parents=True, exist_ok=True)
-
-            # Save as JSON
-            split_data = {
-                "shot": shot,
-                "seed": seed,
-                "train_day": [str(p[0].name) for p in sampled_pairs],
-                "train_night": [str(p[1].name) for p in sampled_pairs],
-                "full_paths": {
-                    "day": [str(p[0]) for p in sampled_pairs],
-                    "night": [str(p[1]) for p in sampled_pairs],
-                },
-            }
-
-            with open(split_dir / "split.json", "w") as f:
-                json.dump(split_data, f, indent=2)
-
-            # Also save as simple text lists (for compatibility with some loaders)
-            with open(split_dir / "train_day.txt", "w") as f:
-                f.write("\n".join([str(p[0].name) for p in sampled_pairs]))
-            with open(split_dir / "train_night.txt", "w") as f:
-                f.write("\n".join([str(p[1].name) for p in sampled_pairs]))
-
-            print(f"Generated {shot}shot/seed{seed} with {len(sampled_pairs)} pairs")
-
-
-def generate_split_summary(output_dir: Path, shot_levels: List[int], num_seeds: int):
-    """Generate a summary JSON for all splits."""
-    summary = {
-        "dataset": "DarkDriving",
-        "shot_levels": shot_levels,
-        "num_seeds": num_seeds,
-        "splits": {},
+    day = {f.name: f for f in day_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS}
+    night = {
+        f.name: f for f in night_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS
     }
 
-    for shot in shot_levels:
-        summary["splits"][f"{shot}shot"] = {}
-        for seed in range(1, num_seeds + 1):
-            split_file = (
-                output_dir
-                / "splits"
-                / "fewshot"
-                / f"{shot}shot"
-                / f"seed{seed}"
-                / "split.json"
-            )
-            if split_file.exists():
-                with open(split_file) as f:
-                    summary["splits"][f"{shot}shot"][f"seed{seed}"] = json.load(f)
+    names = sorted(day.keys() & night.keys())
+    return [(day[n], night[n]) for n in names]
 
-    with open(output_dir / "splits" / "split_summary.json", "w") as f:
-        json.dump(summary, f, indent=2)
 
-    return summary
+def materialize(pairs, day_dst, night_dst, mode):
+    for d, n in pairs:
+        link_or_copy(d, day_dst / d.name, mode)
+        link_or_copy(n, night_dst / n.name, mode)
+
+
+def save_prompts(pairs, path: Path, prompt: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {day.name: prompt for day, _ in pairs}
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def add_prompts(pairs, path: Path, src_prompt: str, tgt_prompt: str):
+    save_prompts(pairs, path, tgt_prompt)
+
+    path.parent.joinpath("fixed_prompt_a.txt").write_text(src_prompt + "\n")
+    path.parent.joinpath("fixed_prompt_b.txt").write_text(tgt_prompt + "\n")
+
+
+def build_test(pairs, out_dir, src_prompt, tgt_prompt, mode):
+    materialize(pairs, out_dir / "test_A", out_dir / "test_B", mode)
+    add_prompts(pairs, out_dir / "test_prompts.json", src_prompt, tgt_prompt)
+
+
+def build_train(pairs, out, shot, seed, src_prompt, tgt_prompt, mode, overwrite):
+    if out.exists():
+        if overwrite:
+            shutil.rmtree(out)
+        else:
+            return False
+
+    sampled = random.Random(seed).sample(pairs, shot)
+
+    materialize(sampled, out / "train_A", out / "train_B", mode)
+    add_prompts(sampled, out / "train_prompts.json", src_prompt, tgt_prompt)
+
+    return True
 
 
 def main():
     args = parse_args()
 
-    if not 0 <= args.val_split < 1:
-        raise ValueError("--val_split must be in the range [0, 1)")
-    if args.num_seeds < 1:
-        raise ValueError("--num_seeds must be at least 1")
-    if any(shot < 1 for shot in args.shot_levels):
-        raise ValueError("--shot_levels values must all be positive")
+    train_day = args.raw_dir / "train" / "day"
+    train_night = args.raw_dir / "train" / "night"
+    test_day = args.raw_dir / "test" / "day"
+    test_night = args.raw_dir / "test" / "night"
 
-    # Validate input directory
-    raw_dir = Path(args.raw_dir)
-    if not raw_dir.exists():
-        raise FileNotFoundError(f"Raw dataset directory not found: {raw_dir}")
+    train_pairs = get_pairs(train_day, train_night)
+    test_pairs = get_pairs(test_day, test_night)
 
-    required_subdirs = ["train/day", "train/night", "test/day", "test/night"]
-    for subdir in required_subdirs:
-        subdir_path = raw_dir / subdir
-        if not subdir_path.exists():
-            raise FileNotFoundError(
-                f"Required directory not found: {subdir_path}\n"
-                f"Expected structure: raw_dir/train/day, raw_dir/train/night, etc."
+    if args.test_dir.exists() and args.overwrite:
+        shutil.rmtree(args.test_dir)
+
+    build_test(
+        test_pairs,
+        args.test_dir,
+        args.source_prompt,
+        args.target_prompt,
+        args.mode,
+    )
+
+    rng = random.Random(42)
+    val_pairs = rng.sample(train_pairs, min(100, len(train_pairs)))
+    remaining_train = [p for p in train_pairs if p not in val_pairs]
+
+    for shot in args.shots:
+        if shot > len(remaining_train):
+            raise ValueError(f"{shot}-shot exceeds dataset size")
+
+        for seed in args.seeds:
+            out_dir = args.output_root / f"{shot}shot" / f"seed{seed}"
+
+            created = build_train(
+                remaining_train,
+                out_dir,
+                shot,
+                seed,
+                args.source_prompt,
+                args.target_prompt,
+                args.mode,
+                args.overwrite,
             )
 
-    output_dir = Path(args.output_dir)
-    if args.overwrite:
-        reset_output(output_dir)
-    else:
-        ensure_output_is_empty(output_dir)
+            build_test(
+                val_pairs,
+                out_dir,
+                args.source_prompt,
+                args.target_prompt,
+                args.mode,
+            )
 
-    print(f"Raw dataset: {raw_dir}")
-    print(f"Output directory: {output_dir}")
-    print(f"Shot levels: {args.shot_levels}")
-    print(f"Number of seeds per level: {args.num_seeds}")
-    print()
-
-    # Create directory structure
-    create_directory_structure(output_dir)
-
-    # Prepare full dataset
-    train_pairs, val_pairs, test_pairs = prepare_full_dataset(
-        raw_dir, output_dir, copy_mode=args.copy_mode, val_split=args.val_split
-    )
-
-    # Generate few-shot splits
-    generate_fewshot_splits(
-        train_pairs, output_dir, shot_levels=args.shot_levels, num_seeds=args.num_seeds
-    )
-
-    # Generate summary
-    generate_split_summary(output_dir, args.shot_levels, args.num_seeds)
-
-    print("\n" + "=" * 50)
-    print("Preprocessing complete!")
-    print(f"Processed data: {output_dir / 'day2night'}")
-    print(f"Splits: {output_dir / 'splits' / 'fewshot'}")
-    print("=" * 50)
+            print(f"{'Built' if created else 'Skipped'} {shot}-shot seed {seed}")
 
 
 if __name__ == "__main__":

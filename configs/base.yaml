@@ -6,35 +6,27 @@
 # Dataset
 data:
   root: "data/processed"
-  img2img_turbo_root: "data/processed/img2img_turbo"
-  dataset_name: "DarkDriving"
   image_size: 512
+
+training:
+  model: "stabilityai/sd-turbo"
+  resolution: 512
   batch_size: 4
   num_workers: 4
-  shot_levels: [10, 20, 50]
-  num_seeds: 3
-  val_split: 0.1
-
-# Model - SD-Turbo backbone
-model:
-  backbone: "stabilityai/sd-turbo"
-  dtype: "fp16"  # fp16 or fp32
+  learning_rate: 5.0e-6
+  max_train_steps: 10000
+  checkpointing_steps: 500
+  mixed_precision: "no"  # switch to fp16 only after applying the FP16 patch
   enable_xformers: true
-
-# Training - shared
-training:
-  num_epochs: 50
-  max_train_steps: null  # set an integer to cap every run by optimizer steps
-  learning_rate: 1e-4
-  lr_scheduler: "constant"
-  gradient_accumulation_steps: 1
   gradient_checkpointing: false
-  mixed_precision: "fp16"
-  save_every: 500
-  eval_every: 200
+  viz_freq: 25
+  eval_freq: 100
+  num_samples_eval: 100
 
 # Training - pix2pix-turbo (paired / SD-Turbo+LoRA)
 pix2pix_turbo:
+  output_dir: "outputs/pix2pix_turbo/train"
+  tracker_project_name: "pix2pix_turbo_darkdriving"
   lora_rank_unet: 8
   lora_rank_vae: 4
   lambda_l2: 1.0
@@ -43,9 +35,11 @@ pix2pix_turbo:
   lambda_gan: 0.5
   train_image_prep: "resized_crop_512"
   test_image_prep: "resized_crop_512"
+  track_val_fid: false
 
 # Training - CycleGAN-Turbo (unpaired)
 cyclegan_turbo:
+  output_dir: "outputs/cyclegan_turbo/train"
   lora_rank_unet: 4
   lora_rank_vae: 4
   lambda_cycle: 1.0
@@ -59,13 +53,15 @@ cyclegan_turbo:
 # Evaluation
 eval:
   metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
+  test_root: "data/processed/test"
   output_dir: "results/evaluation"
+  checkpoint_roots:
+    pix2pix: "${pix2pix_turbo.output_dir}"
+    cyclegan: "${cyclegan_turbo.output_dir}"
   clip_model: "ViT-B/32"
   lpips_backbone: "alex"  # or "vgg"
   test_samples: 200
-  breaking_point_alpha: 0.05
-  bootstrap_iterations: 1000
-  variance_ratio_min: 1.25
+  cmmd_sigma: 1.0
 
 # Logging
 logging:

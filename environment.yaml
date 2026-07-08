@@ -10,14 +10,15 @@ dependencies:
   - pip>=23
   - setuptools<81
 
-  # PyTorch stack
+  # PyTorch CUDA build
   - pytorch=2.0.1
   - torchvision=0.15.2
   - torchaudio=2.0.2
   - pytorch-cuda=11.8
 
-  # System libs
+  # System / ABI stability
   - mkl<2024
 
+  # Install all Python packages from requirements.txt
   - pip:
       - -r requirements.txt

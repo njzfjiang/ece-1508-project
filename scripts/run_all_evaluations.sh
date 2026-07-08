@@ -18,13 +18,14 @@ fi
 echo "======================================================"
 echo "  Running Formal Held-Out Evaluations"
 echo "  Metrics: CMMD, SSIM, LPIPS, CLIP Vision cosine"
-echo "  Shots: 10, 20, 50  |  Seeds: 1, 2, 3"
+echo "  Models: ${MODELS:-pix2pix}"
+echo "  Shots: ${SHOTS:-10 20 50}  |  Seeds: ${SEEDS:-1 2 3}"
 echo "  GPU: $GPU_ID"
 echo "======================================================"
 
-for model in pix2pix cyclegan; do
-    for shot in 10 20 50; do
-        for seed in 1 2 3; do
+for model in ${MODELS:-pix2pix}; do
+    for shot in ${SHOTS:-10 20 50}; do
+        for seed in ${SEEDS:-1 2 3}; do
             echo
             echo "Evaluating ${model}: ${shot}-shot, seed ${seed}"
             "$PYTHON_BIN" src/eval/run_evaluation.py \
@@ -39,6 +40,6 @@ for model in pix2pix cyclegan; do
     done
 done
 
-"$PYTHON_BIN" src/eval/analyze_breaking_point.py --config "$CONFIG_PATH"
+"$PYTHON_BIN" src/eval/summarize_evaluations.py --config "$CONFIG_PATH"
 
 echo "All evaluations completed."

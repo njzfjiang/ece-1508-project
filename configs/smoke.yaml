@@ -1,0 +1,70 @@
+# configs/smoke.yaml
+# Smoke test configuration - overrides base.yaml for quick VPS validation
+# Usage: python scripts/run_experiments.py --config configs/smoke.yaml --shots 10 --seeds 1
+
+data:
+  root: "data/processed"
+  image_size: 512
+
+training:
+  model: "stabilityai/sd-turbo"
+  resolution: 512
+  batch_size: 1
+  num_workers: 0
+  learning_rate: 5.0e-6
+  max_train_steps: 2
+  checkpointing_steps: 2
+  mixed_precision: "no"  # switch to fp16 only after applying the FP16 patch
+  enable_xformers: true
+  gradient_checkpointing: false
+  viz_freq: 25
+  eval_freq: 100
+  num_samples_eval: 1
+
+# Training - pix2pix-turbo (paired / SD-Turbo+LoRA)
+pix2pix_turbo:
+  output_dir: "outputs/smoke/pix2pix_turbo/train"
+  tracker_project_name: "pix2pix_turbo_darkdriving"
+  lora_rank_unet: 8
+  lora_rank_vae: 4
+  lambda_l2: 1.0
+  lambda_lpips: 5.0
+  lambda_clipsim: 5.0
+  lambda_gan: 0.5
+  train_image_prep: "resized_crop_512"
+  test_image_prep: "resized_crop_512"
+  track_val_fid: false
+
+# Training - CycleGAN-Turbo (unpaired)
+cyclegan_turbo:
+  output_dir: "outputs/smoke/cyclegan_turbo/train"
+  lora_rank_unet: 4
+  lora_rank_vae: 4
+  lambda_cycle: 1.0
+  lambda_cycle_lpips: 10.0
+  lambda_identity: 1.0
+  lambda_identity_lpips: 1.0
+  lambda_gan: 0.5
+  train_image_prep: "resize_512x512"
+  val_image_prep: "resize_512x512"
+
+# Evaluation
+eval:
+  metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
+  test_root: "data/processed/test"
+  output_dir: "results/evaluation"
+  checkpoint_roots:
+    pix2pix: "${pix2pix_turbo.output_dir}"
+    cyclegan: "${cyclegan_turbo.output_dir}"
+  clip_model: "ViT-B/32"
+  lpips_backbone: "alex"  # or "vgg"
+  test_samples: 200
+  cmmd_sigma: 1.0
+
+# Logging
+logging:
+  use_wandb: false  # set to true if you have wandb account
+  log_dir: "results/logs"
+  checkpoint_dir: "results/checkpoints"
+  figure_dir: "results/figures"             # smoke test 不开 wandb，省去网络开销
+
