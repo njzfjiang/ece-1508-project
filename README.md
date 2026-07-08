@@ -36,6 +36,12 @@ The dataset is not automatically downloaded due to license and file size.
    unzip darkdriving_lle.zip -d data/raw/
    ```
 
+**Auto Download:**
+Run below code to download the processed data
+```
+bash scripts/download_dark_driving.sh
+```
+
 ## Setup
 
 Python 3.10 and CUDA 11.8 are the reproducible baseline. Conda is recommended:
