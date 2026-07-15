@@ -38,6 +38,11 @@ pix2pix_turbo:
 # Training - CycleGAN-Turbo (unpaired)
 cyclegan_turbo:
   output_dir: "outputs/smoke/cyclegan_turbo/train"
+  tracker_project_name: "cyclegan_turbo_darkdriving"
+  # Runtime values not listed here inherit from training; keep only overrides.
+  resolution: 256
+  mixed_precision: "fp16"
+  gradient_checkpointing: true
   lora_rank_unet: 4
   lora_rank_vae: 4
   lambda_cycle: 1.0
@@ -45,8 +50,12 @@ cyclegan_turbo:
   lambda_identity: 1.0
   lambda_identity_lpips: 1.0
   lambda_gan: 0.5
-  train_image_prep: "resize_512x512"
-  val_image_prep: "resize_512x512"
+  train_image_prep: "resize_256x256"
+  val_image_prep: "resize_256x256"
+  validation_steps: 100
+  validation_num_images: 1
+  skip_training_validation: true
+  allow_tf32: false
 
 # Evaluation
 eval:

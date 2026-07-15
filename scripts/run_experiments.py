@@ -1,4 +1,4 @@
-"""Run the currently implemented few-shot training launcher."""
+"""Run selected few-shot training launchers."""
 
 from __future__ import annotations
 
@@ -31,27 +31,45 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=PROJECT_ROOT / "configs" / "base.yaml",
     )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=["pix2pix", "cyclegan"],
+        default=["pix2pix"],
+        help="Models to train sequentially (default: pix2pix)",
+    )
+    parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument(
+        "--dry-run-cyclegan",
+        action="store_true",
+        help="Print and validate CycleGAN commands without using the GPU",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    command = [
-        sys.executable,
-        str(PROJECT_ROOT / "src" / "train" / "model_paired.py"),
-        "--shots",
-        *map(str, args.shots),
-        "--seeds",
-        *map(str, args.seeds),
-        "--config",
-        str(args.config.resolve()),
-    ]
-    print("[CMD]", " ".join(command))
-    subprocess.run(command, check=True)
-    print(
-        "CycleGAN training is not run yet because src/train/model_unpaired.py "
-        "is still a placeholder."
-    )
+    launchers = {
+        "pix2pix": PROJECT_ROOT / "src" / "train" / "model_paired.py",
+        "cyclegan": PROJECT_ROOT / "src" / "train" / "model_unpaired.py",
+    }
+    for model in args.models:
+        command = [
+            sys.executable,
+            str(launchers[model]),
+            "--shots",
+            *map(str, args.shots),
+            "--seeds",
+            *map(str, args.seeds),
+            "--config",
+            str(args.config.resolve()),
+        ]
+        if model == "cyclegan":
+            command.extend(["--gpu", str(args.gpu)])
+            if args.dry_run_cyclegan:
+                command.append("--dry-run")
+        print("[CMD]", " ".join(command), flush=True)
+        subprocess.run(command, check=True)
     return 0
 
 

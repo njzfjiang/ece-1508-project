@@ -113,19 +113,24 @@ data/
 
 ## Running Experiments
 
-This script launches the implemented pix2pix training runs using 10, 20, and 50
-shots with seeds 1, 2, and 3. CycleGAN is intentionally excluded until
-`src/train/model_unpaired.py` is implemented. Formal held-out evaluation is a
-separate post-training step. To override the defaults, specify `--shots` and
+This script launches config-driven few-shot training using 10, 20, and 50 shots
+with seeds 1, 2, and 3. Pix2pix remains the default so an existing command does
+not unexpectedly start the more memory-intensive CycleGAN job. Select one or
+both models with `--models`; override the experiment grid with `--shots` and
 `--seeds`.
+
 ```bash
 python scripts/run_experiments.py
+
+python scripts/run_experiments.py \
+  --models pix2pix cyclegan
 ```
 
-`configs/base.yaml` controls the upstream pix2pix command, including batch size,
+`configs/base.yaml` controls both upstream commands, including batch size,
 workers, learning rate, training/checkpoint steps, precision, xformers, gradient
-checkpointing, LoRA ranks, loss weights, image preparation, validation FID, and
-W&B logging. When `logging.use_wandb` is false, the launcher sets
+checkpointing, LoRA ranks, loss weights, and image preparation. CycleGAN skips
+its expensive training-time FID/DINO path by default because formal evaluation
+is separate. When `logging.use_wandb` is false, the launchers set
 `WANDB_MODE=disabled` while retaining the upstream-supported `wandb` reporter.
 
 For a cheap first VPS smoke test, use the dedicated config and one run:
@@ -139,6 +144,29 @@ python scripts/run_experiments.py \
 
 The run must stop at exactly two steps and write
 `outputs/smoke/pix2pix_turbo/train/10shot/seed1/checkpoints/model_2.pkl`.
+
+Validate the CycleGAN command without using the GPU, then run its conservative
+256x256 smoke configuration:
+
+```bash
+python scripts/run_experiments.py \
+  --models cyclegan \
+  --config configs/smoke.yaml \
+  --shots 10 \
+  --seeds 1 \
+  --dry-run-cyclegan
+
+python scripts/run_experiments.py \
+  --models cyclegan \
+  --config configs/smoke.yaml \
+  --shots 10 \
+  --seeds 1
+```
+
+The compatibility entrypoint `scripts/train_cyclegan_10shot.py` delegates to
+the same launcher; it no longer maintains a separate hard-coded training path.
+The CycleGAN smoke checkpoint is written to
+`outputs/smoke/cyclegan_turbo/train/10shot/seed1/checkpoints/model_2.pkl`.
 
 The launcher refuses to start when that run directory already contains checkpoints,
 because automatic resume is not supported. Move or remove an earlier smoke run before
@@ -157,8 +185,8 @@ Run all formal evaluations after the training checkpoints exist:
 bash scripts/run_all_evaluations.sh
 ```
 
-The wrapper evaluates pix2pix by default. Once CycleGAN training is implemented,
-run both with `MODELS="pix2pix cyclegan" bash scripts/run_all_evaluations.sh`.
+The wrapper evaluates pix2pix by default. Evaluate both trained models with
+`MODELS="pix2pix cyclegan" bash scripts/run_all_evaluations.sh`.
 
 The runner computes per-sample SSIM, LPIPS, and CLIP Vision cosine similarity,
 then computes run-level CMMD from CLIP image embeddings. Outputs are written

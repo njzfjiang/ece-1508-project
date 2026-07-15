@@ -1,0 +1,24 @@
+diff --git a/src/cyclegan_turbo.py b/src/cyclegan_turbo.py
+--- a/src/cyclegan_turbo.py
++++ b/src/cyclegan_turbo.py
+@@ -81,7 +81,7 @@ def initialize_vae(rank=4, return_lora_module_names=False):
+     vae.requires_grad_(False)
+     vae.encoder.forward = my_vae_encoder_fwd.__get__(vae.encoder, vae.encoder.__class__)
+     vae.decoder.forward = my_vae_decoder_fwd.__get__(vae.decoder, vae.decoder.__class__)
+-    vae.requires_grad_(True)
++    # Keep pretrained VAE weights frozen; LoRA adapters and skip convolutions remain trainable.
+     vae.train()
+     # add the skip connection convs
+     vae.decoder.skip_conv_1 = torch.nn.Conv2d(512, 512, kernel_size=(1, 1), stride=(1, 1), bias=False).cuda().requires_grad_(True)
+diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
+--- a/src/train_cyclegan_turbo.py
++++ b/src/train_cyclegan_turbo.py
+@@ -273,7 +273,7 @@ def main(args):
+                     eval_unet = accelerator.unwrap_model(unet)
+                     eval_vae_enc = accelerator.unwrap_model(vae_enc)
+                     eval_vae_dec = accelerator.unwrap_model(vae_dec)
+-                    if global_step % args.viz_freq == 1:
++                    if global_step % args.viz_freq == 0:
+                         for tracker in accelerator.trackers:
+                             if tracker.name == "wandb":
+                                 viz_img_a = batch["pixel_values_src"].to(dtype=weight_dtype)

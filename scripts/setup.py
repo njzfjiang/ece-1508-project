@@ -19,6 +19,7 @@ PATCHES = [
     PROJECT_ROOT / "patches" / "img2img-turbo-pix2pix-fp16.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-optimizer-params.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-training.patch",
+    PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-memory.patch",
 ]
 REQUIRED_SUBDIRS = ["train/day", "train/night", "test/day", "test/night"]
 
