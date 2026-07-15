@@ -44,6 +44,7 @@ cyclegan_turbo:
   # Runtime values not listed here inherit from training; keep only overrides.
   batch_size: 1
   num_workers: 0
+  checkpointing_steps: 2000
   mixed_precision: "fp16"
   gradient_checkpointing: true
   lora_rank_unet: 4

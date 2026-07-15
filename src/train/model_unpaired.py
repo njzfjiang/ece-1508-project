@@ -24,6 +24,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".gif"}
 REQUIRED_TRAINER_MARKERS = (
     "max_train_steps is the authoritative stopping condition for CycleGAN-Turbo",
     "args.skip_training_validation",
+    "Backward each direction before constructing the next graph",
 )
 REQUIRED_MODEL_MARKERS = (
     "LoRA-wrapped skip convolutions expose adapter parameters twice above",

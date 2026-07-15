@@ -130,8 +130,11 @@ python scripts/run_experiments.py \
 workers, learning rate, training/checkpoint steps, precision, xformers, gradient
 checkpointing, LoRA ranks, loss weights, and image preparation. CycleGAN skips
 its expensive training-time FID/DINO path by default because formal evaluation
-is separate. When `logging.use_wandb` is false, the launchers set
-`WANDB_MODE=disabled` while retaining the upstream-supported `wandb` reporter.
+is separate, backpropagates the two translation directions sequentially to
+reduce peak activation memory, and checkpoints every 2000 steps because its
+checkpoint files are substantially larger. When `logging.use_wandb` is false,
+the launchers set `WANDB_MODE=disabled` while retaining the upstream-supported
+`wandb` reporter.
 
 For a cheap first VPS smoke test, use the dedicated config and one run:
 

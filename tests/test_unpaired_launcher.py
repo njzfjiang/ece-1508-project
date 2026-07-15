@@ -77,6 +77,13 @@ def test_cli_overrides_change_steps_resolution_and_precision():
     assert settings.val_image_prep == "resize_256x256"
 
 
+def test_base_config_uses_sparse_cyclegan_checkpoints():
+    config = model_unpaired.load_config(model_unpaired.DEFAULT_CONFIG)
+    settings = model_unpaired.settings_from_config(config, make_args())
+
+    assert settings.checkpointing_steps == 2000
+
+
 def test_zero_step_override_is_preserved_for_main_validation():
     config = model_unpaired.load_config(model_unpaired.DEFAULT_CONFIG)
     settings = model_unpaired.settings_from_config(config, make_args(steps=0))
@@ -124,6 +131,16 @@ def test_vendor_marker_validation_reports_partial_patch(tmp_path):
         model_unpaired._validate_markers(
             vendor_file, model_unpaired.REQUIRED_TRAINER_MARKERS
         )
+
+
+def test_cycle_directions_backward_sequentially():
+    source = model_unpaired.UPSTREAM_TRAINER.read_text(encoding="utf-8")
+
+    first_backward = source.index("accelerator.backward(loss_cycle_a")
+    second_forward = source.index("cyc_fake_a = CycleGAN_Turbo.forward_with_networks")
+    second_backward = source.index("accelerator.backward(loss_cycle_b")
+
+    assert first_backward < second_forward < second_backward
 
 
 def test_standalone_wrapper_preserves_10shot_seed1_defaults(monkeypatch):
