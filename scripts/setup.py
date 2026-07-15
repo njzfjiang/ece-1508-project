@@ -81,7 +81,23 @@ def setup_repo() -> None:
     if not EXTERNAL_DIR.exists():
         run(["git", "clone", UPSTREAM_URL, str(EXTERNAL_DIR)])
     run(["git", "-C", str(EXTERNAL_DIR), "fetch"])
-    run(["git", "-C", str(EXTERNAL_DIR), "checkout", UPSTREAM_COMMIT])
+    # external/img2img-turbo is a generated, project-managed vendor checkout.
+    # A normal checkout leaves changes from previously applied compatibility
+    # patches in place, which prevents a newer consolidated patch from applying.
+    # Force the tracked vendor files back to the pinned upstream snapshot on
+    # every setup run; untracked files are deliberately left alone.
+    print("Resetting managed img2img-turbo files to the pinned upstream commit...")
+    run(
+        [
+            "git",
+            "-C",
+            str(EXTERNAL_DIR),
+            "checkout",
+            "--detach",
+            "--force",
+            UPSTREAM_COMMIT,
+        ]
+    )
     for patch_path in PATCHES:
         apply_patch(patch_path)
 
