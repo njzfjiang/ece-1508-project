@@ -11,17 +11,3 @@ diff --git a/src/cyclegan_turbo.py b/src/cyclegan_turbo.py
 +            base_conv_in = getattr(self.unet.conv_in, "base_layer", self.unet.conv_in)
 +            base_conv_in.load_state_dict(sd["sd_unet_conv_in"])
          self.unet.set_adapter(["default_encoder", "default_decoder", "default_others"])
-diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
---- a/src/train_cyclegan_turbo.py
-+++ b/src/train_cyclegan_turbo.py
-@@ -300,6 +300,10 @@ def main(args):
-                         sd["sd_encoder"] = get_peft_model_state_dict(eval_unet, adapter_name="default_encoder")
-                         sd["sd_decoder"] = get_peft_model_state_dict(eval_unet, adapter_name="default_decoder")
-                         sd["sd_other"] = get_peft_model_state_dict(eval_unet, adapter_name="default_others")
-+                        # conv_in is explicitly optimized in addition to its LoRA
-+                        # adapter, so its base weights must also survive inference.
-+                        base_conv_in = getattr(eval_unet.conv_in, "base_layer", eval_unet.conv_in)
-+                        sd["sd_unet_conv_in"] = base_conv_in.state_dict()
-                         sd["rank_vae"] = args.lora_rank_vae
-                         sd["vae_lora_target_modules"] = vae_lora_target_modules
-                         sd["sd_vae_enc"] = eval_vae_enc.state_dict()

@@ -1,7 +1,8 @@
 diff --git a/src/my_utils/training_utils.py b/src/my_utils/training_utils.py
+index f0819b7..2a4bca2 100644
 --- a/src/my_utils/training_utils.py
 +++ b/src/my_utils/training_utils.py
-@@ -145,6 +145,10 @@ def parse_args_unpaired_training():
+@@ -147,7 +147,22 @@ def parse_args_unpaired_training():
      parser.add_argument("--tracker_project_name", type=str, required=True)
      parser.add_argument("--validation_steps", type=int, default=500,)
      parser.add_argument("--validation_num_images", type=int, default=-1, help="Number of images to use for validation. -1 to use all images.")
@@ -10,24 +11,280 @@ diff --git a/src/my_utils/training_utils.py b/src/my_utils/training_utils.py
 +        help="Skip FID/DINO initialization and validation during training; use an external evaluator instead.",
 +    )
      parser.add_argument("--checkpointing_steps", type=int, default=500)
- 
++    parser.add_argument(
++        "--preview_steps", type=int, default=100,
++        help="Save a fixed held-out A-to-B preview every N steps; 0 disables previews.",
++    )
++    parser.add_argument(
++        "--resume_from_checkpoint", type=str, default=None,
++        help=(
++            "Resume from model_<step>.pkl or training_state_<step>.pt. "
++            "--max_train_steps remains the total target step count."
++        ),
++    )
+
      # args for the optimization options
+     parser.add_argument("--learning_rate", type=float, default=5e-6,)
 diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
+index 2e3143c..640523b 100644
 --- a/src/train_cyclegan_turbo.py
 +++ b/src/train_cyclegan_turbo.py
-@@ -25,6 +25,9 @@ def main(args):
+@@ -1,6 +1,8 @@
+ import os
+ import gc
+ import copy
++import csv
++import random
+ import lpips
+ import torch
+ import wandb
+@@ -22,12 +24,195 @@ from my_utils.training_utils import UnpairedDataset, build_transform, parse_args
+ from my_utils.dino_struct import DinoStructureLoss
+
+
++LOSS_FIELDS = (
++    "step", "cycle_a", "cycle_b", "gan_a", "gan_b", "disc_a", "disc_b",
++    "idt_a", "idt_b", "lr_gen", "lr_disc",
++)
++
++
++def atomic_torch_save(value, path):
++    """Avoid leaving a seemingly valid checkpoint after an interrupted write."""
++    temporary_path = f"{path}.tmp"
++    torch.save(value, temporary_path)
++    os.replace(temporary_path, path)
++
++
++def build_model_checkpoint(
++    eval_unet, eval_vae_enc, eval_vae_dec, args,
++    l_modules_unet_encoder, l_modules_unet_decoder, l_modules_unet_others,
++    vae_lora_target_modules,
++):
++    sd = {
++        "l_target_modules_encoder": l_modules_unet_encoder,
++        "l_target_modules_decoder": l_modules_unet_decoder,
++        "l_modules_others": l_modules_unet_others,
++        "rank_unet": args.lora_rank_unet,
++        "sd_encoder": get_peft_model_state_dict(eval_unet, adapter_name="default_encoder"),
++        "sd_decoder": get_peft_model_state_dict(eval_unet, adapter_name="default_decoder"),
++        "sd_other": get_peft_model_state_dict(eval_unet, adapter_name="default_others"),
++        "rank_vae": args.lora_rank_vae,
++        "vae_lora_target_modules": vae_lora_target_modules,
++        "sd_vae_enc": eval_vae_enc.state_dict(),
++        "sd_vae_dec": eval_vae_dec.state_dict(),
++    }
++    # conv_in is explicitly optimized in addition to its LoRA adapter.
++    base_conv_in = getattr(eval_unet.conv_in, "base_layer", eval_unet.conv_in)
++    sd["sd_unet_conv_in"] = base_conv_in.state_dict()
++    return sd
++
++
++def load_model_checkpoint(sd, unet, vae_enc, vae_dec, args):
++    if sd["rank_unet"] != args.lora_rank_unet or sd["rank_vae"] != args.lora_rank_vae:
++        raise ValueError(
++            "Resume checkpoint LoRA ranks do not match this run: "
++            f"checkpoint=({sd['rank_unet']}, {sd['rank_vae']}), "
++            f"requested=({args.lora_rank_unet}, {args.lora_rank_vae})"
++        )
++    adapter_states = (
++        ("default_encoder", sd["sd_encoder"]),
++        ("default_decoder", sd["sd_decoder"]),
++        ("default_others", sd["sd_other"]),
++    )
++    for adapter_name, adapter_state in adapter_states:
++        for name, parameter in unet.named_parameters():
++            state_name = name.replace(f".{adapter_name}.weight", ".weight")
++            if "lora" in name and adapter_name in name:
++                parameter.data.copy_(adapter_state[state_name])
++    if "sd_unet_conv_in" in sd:
++        base_conv_in = getattr(unet.conv_in, "base_layer", unet.conv_in)
++        base_conv_in.load_state_dict(sd["sd_unet_conv_in"])
++    vae_enc.load_state_dict(sd["sd_vae_enc"])
++    vae_dec.load_state_dict(sd["sd_vae_dec"])
++
++
++def trainable_parameter_state(module):
++    return {
++        name: parameter.detach().cpu()
++        for name, parameter in module.named_parameters()
++        if parameter.requires_grad
++    }
++
++
++def load_trainable_parameter_state(module, state, label):
++    parameters = dict(module.named_parameters())
++    missing = sorted(set(state) - set(parameters))
++    if missing:
++        raise ValueError(f"Unknown parameters in {label} resume state: {missing[:5]}")
++    for name, value in state.items():
++        parameters[name].data.copy_(value)
++
++
++def checkpoint_paths(output_dir, step):
++    checkpoint_dir = os.path.join(output_dir, "checkpoints")
++    return (
++        os.path.join(checkpoint_dir, f"model_{step}.pkl"),
++        os.path.join(checkpoint_dir, f"training_state_{step}.pt"),
++    )
++
++
++def resolve_resume_paths(path):
++    path = os.path.abspath(path)
++    filename = os.path.basename(path)
++    if filename.startswith("model_") and filename.endswith(".pkl"):
++        step_text = filename[len("model_"):-len(".pkl")]
++        model_path = path
++        state_path = os.path.join(os.path.dirname(path), f"training_state_{step_text}.pt")
++    elif filename.startswith("training_state_") and filename.endswith(".pt"):
++        step_text = filename[len("training_state_"):-len(".pt")]
++        state_path = path
++        model_path = os.path.join(os.path.dirname(path), f"model_{step_text}.pkl")
++    else:
++        raise ValueError(
++            "--resume_from_checkpoint must name model_<step>.pkl or "
++            "training_state_<step>.pt"
++        )
++    if not step_text.isdigit():
++        raise ValueError(f"Could not read a step number from resume checkpoint: {path}")
++    for required_path in (model_path, state_path):
++        if not os.path.isfile(required_path):
++            raise FileNotFoundError(f"Required resume file not found: {required_path}")
++    return model_path, state_path, int(step_text)
++
++
++def rng_state_dict():
++    return {
++        "python": random.getstate(),
++        "numpy": np.random.get_state(),
++        "torch": torch.get_rng_state(),
++        "cuda": torch.cuda.get_rng_state_all(),
++    }
++
++
++def restore_rng_state(state):
++    random.setstate(state["python"])
++    np.random.set_state(state["numpy"])
++    torch.set_rng_state(state["torch"])
++    torch.cuda.set_rng_state_all(state["cuda"])
++
++
++def prepare_loss_csv(path, resume_step):
++    if resume_step and os.path.isfile(path):
++        with open(path, newline="", encoding="utf-8") as handle:
++            rows = list(csv.DictReader(handle))
++        rows = [row for row in rows if int(row["step"]) <= resume_step]
++        temporary_path = f"{path}.tmp"
++        with open(temporary_path, "w", newline="", encoding="utf-8") as handle:
++            writer = csv.DictWriter(handle, fieldnames=LOSS_FIELDS)
++            writer.writeheader()
++            writer.writerows(rows)
++        os.replace(temporary_path, path)
++    exists = os.path.isfile(path) and os.path.getsize(path) > 0
++    handle = open(path, "a", newline="", encoding="utf-8")
++    writer = csv.DictWriter(handle, fieldnames=LOSS_FIELDS)
++    if not exists:
++        writer.writeheader()
++        handle.flush()
++    return handle, writer
++
++
++def save_a2b_preview(
++    input_path, output_dir, step, transform, vae_enc, unet, vae_dec,
++    scheduler, text_embedding, device, weight_dtype,
++):
++    preview_dir = os.path.join(output_dir, "previews")
++    os.makedirs(preview_dir, exist_ok=True)
++    input_image = transform(Image.open(input_path).convert("RGB"))
++    input_image.save(os.path.join(preview_dir, "input_A.png"))
++    image_tensor = transforms.ToTensor()(input_image)
++    image_tensor = transforms.Normalize([0.5], [0.5])(image_tensor).unsqueeze(0)
++    image_tensor = image_tensor.to(device=device, dtype=weight_dtype)
++    timesteps = torch.tensor(
++        [scheduler.config.num_train_timesteps - 1], device=device
++    ).long()
++    modules = (vae_enc, unet, vae_dec)
++    training_modes = [module.training for module in modules]
++    for module in modules:
++        module.eval()
++    with torch.no_grad():
++        generated = CycleGAN_Turbo.forward_with_networks(
++            image_tensor, "a2b", vae_enc, unet, vae_dec, scheduler,
++            timesteps, text_embedding[0:1].to(dtype=weight_dtype),
++        )
++    preview = transforms.ToPILImage()(generated[0].float().cpu() * 0.5 + 0.5)
++    preview.save(os.path.join(preview_dir, f"a2b_step_{step:08d}.png"))
++    for module, was_training in zip(modules, training_modes):
++        module.train(was_training)
++
++
+ def main(args):
      accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, log_with=args.report_to)
      set_seed(args.seed)
- 
+
 +    if args.max_train_steps is None:
 +        raise ValueError("CycleGAN-Turbo training requires --max_train_steps")
++    if args.checkpointing_steps <= 0:
++        raise ValueError("--checkpointing_steps must be positive")
++    if args.preview_steps < 0:
++        raise ValueError("--preview_steps cannot be negative")
 +
      if accelerator.is_main_process:
          os.makedirs(os.path.join(args.output_dir, "checkpoints"), exist_ok=True)
- 
-@@ -83,7 +87,8 @@ def main(args):
++        os.makedirs(os.path.join(args.output_dir, "previews"), exist_ok=True)
+
+     tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer", revision=args.revision, use_fast=False,)
+     noise_scheduler_1step = make_1step_sched()
+@@ -66,6 +251,43 @@ def main(args):
+     vae_enc = VAE_encode(vae_a2b, vae_b2a=vae_b2a)
+     vae_dec = VAE_decode(vae_a2b, vae_b2a=vae_b2a)
+
++    global_step = 0
++    resume_state = None
++    if args.resume_from_checkpoint:
++        model_path, state_path, filename_step = resolve_resume_paths(args.resume_from_checkpoint)
++        model_state = torch.load(model_path, map_location="cpu")
++        load_model_checkpoint(model_state, unet, vae_enc, vae_dec, args)
++        del model_state
++        resume_state = torch.load(state_path, map_location="cpu")
++        if resume_state.get("format_version") != 1:
++            raise ValueError(
++                f"Unsupported training-state format: {resume_state.get('format_version')}"
++            )
++        global_step = int(resume_state["global_step"])
++        if global_step != filename_step:
++            raise ValueError(
++                f"Resume filename says step {filename_step}, but its state says {global_step}"
++            )
++        if global_step >= args.max_train_steps:
++            raise ValueError(
++                "--max_train_steps is the total target and must be greater than "
++                f"the resumed step ({global_step})"
++            )
++        saved_config = resume_state.get("config", {})
++        if saved_config.get("learning_rate", args.learning_rate) != args.learning_rate:
++            raise ValueError(
++                "Resume learning rate differs from the checkpoint. Use "
++                f"--learning_rate {saved_config['learning_rate']} to continue exactly."
++            )
++        if saved_config.get("train_img_prep", args.train_img_prep) != args.train_img_prep:
++            raise ValueError(
++                "Resume resolution differs from the checkpoint. Use "
++                f"--train_img_prep {saved_config['train_img_prep']} to continue exactly."
++            )
++        load_trainable_parameter_state(net_disc_a, resume_state["disc_a"], "disc_a")
++        load_trainable_parameter_state(net_disc_b, resume_state["disc_b"], "disc_b")
++        print(f"Resuming CycleGAN-Turbo from step {global_step}: {state_path}")
++
+     optimizer_gen = torch.optim.AdamW(params_gen, lr=args.learning_rate, betas=(args.adam_beta1, args.adam_beta2),
+         weight_decay=args.adam_weight_decay, eps=args.adam_epsilon,)
+
+@@ -85,9 +307,12 @@ def main(args):
+     for ext in ["*.jpg", "*.jpeg", "*.png", "*.bmp"]:
+         l_images_tgt_test.extend(glob(os.path.join(args.dataset_folder, "test_B", ext)))
      l_images_src_test, l_images_tgt_test = sorted(l_images_src_test), sorted(l_images_tgt_test)
- 
++    if args.preview_steps and not l_images_src_test:
++        raise ValueError("A-to-B previews require at least one image in test_A")
+
      # make the reference FID statistics
 -    if accelerator.is_main_process:
 +    # Skip training-time FID initialization when formal evaluation is external.
@@ -35,47 +292,156 @@ diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
          feat_model = build_feature_extractor("clean", "cuda", use_dataparallel=False)
          """
          FID reference statistics for A -> B translation
-@@ -149,8 +154,8 @@ def main(args):
- 
+@@ -147,12 +372,27 @@ def main(args):
+     net_lpips, optimizer_gen, optimizer_disc, train_dataloader, lr_scheduler_gen, lr_scheduler_disc = accelerator.prepare(
+         net_lpips, optimizer_gen, optimizer_disc, train_dataloader, lr_scheduler_gen, lr_scheduler_disc
+     )
++    if resume_state is not None:
++        optimizer_gen.load_state_dict(resume_state["optimizer_gen"])
++        optimizer_disc.load_state_dict(resume_state["optimizer_disc"])
++        lr_scheduler_gen.load_state_dict(resume_state["lr_scheduler_gen"])
++        lr_scheduler_disc.load_state_dict(resume_state["lr_scheduler_disc"])
++        if accelerator.scaler is not None and resume_state.get("scaler") is not None:
++            accelerator.scaler.load_state_dict(resume_state["scaler"])
++        restore_rng_state(resume_state["rng"])
++        del resume_state
+     if accelerator.is_main_process:
+         accelerator.init_trackers(args.tracker_project_name, config=dict(vars(args)))
+
++    loss_csv_handle = None
++    loss_csv_writer = None
++    if accelerator.is_main_process:
++        loss_csv_handle, loss_csv_writer = prepare_loss_csv(
++            os.path.join(args.output_dir, "losses.csv"), global_step
++        )
++
      first_epoch = 0
-     global_step = 0
+-    global_step = 0
 -    progress_bar = tqdm(range(0, args.max_train_steps), initial=global_step, desc="Steps",
--        disable=not accelerator.is_local_main_process,)
 +    progress_bar = tqdm(total=args.max_train_steps, initial=global_step, desc="Steps",
-+        disable=not accelerator.is_local_main_process,)
+         disable=not accelerator.is_local_main_process,)
      # turn off eff. attn for the disc
      for name, module in net_disc_a.named_modules():
-         if "attn" in name:
-@@ -159,7 +164,8 @@ def main(args):
+@@ -162,7 +402,8 @@ def main(args):
          if "attn" in name:
              module.fused_attn = False
- 
+
 -    for epoch in range(first_epoch, args.max_train_epochs):
 +    # max_train_steps is the authoritative stopping condition for CycleGAN-Turbo.
 +    while global_step < args.max_train_steps:
          for step, batch in enumerate(train_dataloader):
              l_acc = [unet, net_disc_a, net_disc_b, vae_enc, vae_dec]
              with accelerator.accumulate(*l_acc):
-@@ -293,2 +299,2 @@ def main(args):
+@@ -273,6 +514,8 @@ def main(args):
+                     eval_unet = accelerator.unwrap_model(unet)
+                     eval_vae_enc = accelerator.unwrap_model(vae_enc)
+                     eval_vae_dec = accelerator.unwrap_model(vae_dec)
++                    eval_disc_a = accelerator.unwrap_model(net_disc_a)
++                    eval_disc_b = accelerator.unwrap_model(net_disc_b)
+                     if global_step % args.viz_freq == 1:
+                         for tracker in accelerator.trackers:
+                             if tracker.name == "wandb":
+@@ -290,26 +533,75 @@ def main(args):
+                                 gc.collect()
+                                 torch.cuda.empty_cache()
+
 -                    if global_step % args.checkpointing_steps == 1:
+-                        outf = os.path.join(args.output_dir, "checkpoints", f"model_{global_step}.pkl")
+-                        sd = {}
+-                        sd["l_target_modules_encoder"] = l_modules_unet_encoder
+-                        sd["l_target_modules_decoder"] = l_modules_unet_decoder
+-                        sd["l_modules_others"] = l_modules_unet_others
+-                        sd["rank_unet"] = args.lora_rank_unet
+-                        sd["sd_encoder"] = get_peft_model_state_dict(eval_unet, adapter_name="default_encoder")
+-                        sd["sd_decoder"] = get_peft_model_state_dict(eval_unet, adapter_name="default_decoder")
+-                        sd["sd_other"] = get_peft_model_state_dict(eval_unet, adapter_name="default_others")
+-                        sd["rank_vae"] = args.lora_rank_vae
+-                        sd["vae_lora_target_modules"] = vae_lora_target_modules
+-                        sd["sd_vae_enc"] = eval_vae_enc.state_dict()
+-                        sd["sd_vae_dec"] = eval_vae_dec.state_dict()
+-                        torch.save(sd, outf)
++                    csv_row = {"step": global_step, **logs}
++                    csv_row["lr_gen"] = optimizer_gen.param_groups[0]["lr"]
++                    csv_row["lr_disc"] = optimizer_disc.param_groups[0]["lr"]
++                    loss_csv_writer.writerow(csv_row)
++                    loss_csv_handle.flush()
++
++                    preview_due = args.preview_steps and (
++                        global_step % args.preview_steps == 0
++                        or global_step >= args.max_train_steps
++                    )
++                    if preview_due:
++                        # The training step's graphs are no longer needed. Free them
++                        # before the extra fixed-image forward pass to limit peak VRAM.
++                        del cyc_fake_b, cyc_rec_a, cyc_fake_a, cyc_rec_b
++                        del fake_a, fake_b, idt_a, idt_b
++                        del loss_cycle_a, loss_cycle_b, loss_gan_a, loss_gan_b
++                        del loss_idt_a, loss_idt_b, loss_g_idt
++                        del loss_D_A_fake, loss_D_B_fake, loss_D_fake
++                        del loss_D_A_real, loss_D_B_real, loss_D_real
++                        gc.collect()
++                        torch.cuda.empty_cache()
++                        save_a2b_preview(
++                            l_images_src_test[0], args.output_dir, global_step,
++                            T_val, eval_vae_enc, eval_unet, eval_vae_dec,
++                            noise_scheduler_1step, fixed_a2b_emb_base,
++                            accelerator.device, weight_dtype,
++                        )
++                        gc.collect()
++                        torch.cuda.empty_cache()
++
 +                    if global_step % args.checkpointing_steps == 0 or global_step >= args.max_train_steps:
-                         outf = os.path.join(args.output_dir, "checkpoints", f"model_{global_step}.pkl")
-@@ -306,7 +312,7 @@ def main(args):
++                        model_path, state_path = checkpoint_paths(args.output_dir, global_step)
++                        model_state = build_model_checkpoint(
++                            eval_unet, eval_vae_enc, eval_vae_dec, args,
++                            l_modules_unet_encoder, l_modules_unet_decoder,
++                            l_modules_unet_others, vae_lora_target_modules,
++                        )
++                        atomic_torch_save(model_state, model_path)
++                        del model_state
++                        training_state = {
++                            "format_version": 1,
++                            "global_step": global_step,
++                            "model_checkpoint": os.path.basename(model_path),
++                            "disc_a": trainable_parameter_state(eval_disc_a),
++                            "disc_b": trainable_parameter_state(eval_disc_b),
++                            "optimizer_gen": optimizer_gen.state_dict(),
++                            "optimizer_disc": optimizer_disc.state_dict(),
++                            "lr_scheduler_gen": lr_scheduler_gen.state_dict(),
++                            "lr_scheduler_disc": lr_scheduler_disc.state_dict(),
++                            "scaler": (
++                                accelerator.scaler.state_dict()
++                                if accelerator.scaler is not None
++                                else None
++                            ),
++                            "rng": rng_state_dict(),
++                            "config": {
++                                "learning_rate": args.learning_rate,
++                                "lora_rank_unet": args.lora_rank_unet,
++                                "lora_rank_vae": args.lora_rank_vae,
++                                "train_img_prep": args.train_img_prep,
++                            },
++                        }
++                        atomic_torch_save(training_state, state_path)
++                        del training_state
+                         gc.collect()
                          torch.cuda.empty_cache()
- 
+
                      # compute val FID and DINO-Struct scores
 -                    if global_step % args.validation_steps == 1:
 +                    if not args.skip_training_validation and global_step % args.validation_steps == 0:
                          _timesteps = torch.tensor([noise_scheduler_1step.config.num_train_timesteps - 1] * 1, device="cuda").long()
                          net_dino = DinoStructureLoss()
                          """
-@@ -376,6 +382,9 @@ def main(args):
+@@ -384,6 +676,11 @@ def main(args):
              if global_step >= args.max_train_steps:
                  break
- 
+
 +    accelerator.wait_for_everyone()
++    if loss_csv_handle is not None:
++        loss_csv_handle.close()
 +    accelerator.end_training()
 +
- 
+
  if __name__ == "__main__":
      args = parse_args_unpaired_training()

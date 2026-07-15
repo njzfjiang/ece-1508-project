@@ -51,7 +51,8 @@ class TrainingSettings:
     resolution: int = 256
     batch_size: int = 1
     steps: int = 100
-    checkpoint_every: int = 100
+    checkpoint_every: int = 500
+    preview_every: int = 100
     learning_rate: float = 5e-6
     precision: str = "fp16"
     lora_rank_unet: int = 4
@@ -62,6 +63,7 @@ class TrainingSettings:
     lambda_identity_lpips: float = 1.0
     lambda_gan: float = 0.5
     seed: int = 1
+    resume_from_checkpoint: Path | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,6 +82,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--steps", type=int, default=100)
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=500,
+        help="Save inference and resumable training checkpoints every N steps",
+    )
+    parser.add_argument(
+        "--preview-every",
+        type=int,
+        default=100,
+        help="Save a fixed held-out A-to-B preview every N steps; 0 disables",
+    )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=5e-6,
+        help="Learning rate for both generator and discriminator optimizers",
+    )
+    parser.add_argument(
+        "--resume-from-checkpoint",
+        type=Path,
+        help=(
+            "Resume from model_<step>.pkl or training_state_<step>.pt; "
+            "--steps is the final total step"
+        ),
+    )
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument(
         "--lora-rank-unet",
@@ -156,6 +184,8 @@ def validate_upstream_trainer(trainer: Path) -> None:
         trainer: (
             "args.skip_training_validation",
             'sd["sd_unet_conv_in"] = base_conv_in.state_dict()',
+            "args.resume_from_checkpoint",
+            'os.path.join(args.output_dir, "losses.csv")',
         ),
         model: ('base_conv_in.load_state_dict(sd["sd_unet_conv_in"])',),
     }
@@ -207,6 +237,8 @@ def build_command(
         str(settings.steps),
         "--checkpointing_steps",
         str(settings.checkpoint_every),
+        "--preview_steps",
+        str(settings.preview_every),
         "--gradient_accumulation_steps",
         "1",
         "--learning_rate",
@@ -249,6 +281,10 @@ def build_command(
         command.append("--enable_xformers_memory_efficient_attention")
     if use_gradient_checkpointing:
         command.append("--gradient_checkpointing")
+    if settings.resume_from_checkpoint is not None:
+        command.extend(
+            ["--resume_from_checkpoint", str(settings.resume_from_checkpoint)]
+        )
     return command
 
 
@@ -265,6 +301,9 @@ def print_run_summary(
     print(f"  resolution:      {settings.resolution}x{settings.resolution}")
     print(f"  batch size:      {settings.batch_size}")
     print(f"  optimizer steps: {settings.steps}")
+    print(f"  checkpoint every: {settings.checkpoint_every} steps")
+    print(f"  preview every:   {settings.preview_every or 'disabled'}")
+    print(f"  learning rate:   {settings.learning_rate}")
     print(f"  precision:       {settings.precision}")
     print(f"  physical GPU:    {gpu}")
     print(f"  output:          {output}")
@@ -301,6 +340,12 @@ def main() -> int:
         raise ValueError("--seed must be positive")
     if args.lora_rank_unet <= 0 or args.lora_rank_vae <= 0:
         raise ValueError("LoRA ranks must be positive")
+    if args.checkpoint_every <= 0:
+        raise ValueError("--checkpoint-every must be positive")
+    if args.preview_every < 0:
+        raise ValueError("--preview-every cannot be negative")
+    if args.learning_rate <= 0:
+        raise ValueError("--learning-rate must be positive")
 
     split_name = f"{args.shots}shot"
     seed_name = f"seed{args.seed}"
@@ -314,11 +359,18 @@ def main() -> int:
         expected_images_per_domain=args.shots,
         resolution=args.resolution,
         steps=args.steps,
-        checkpoint_every=args.steps,
+        checkpoint_every=args.checkpoint_every,
+        preview_every=args.preview_every,
+        learning_rate=args.learning_rate,
         precision=args.precision,
         lora_rank_unet=args.lora_rank_unet,
         lora_rank_vae=args.lora_rank_vae,
         seed=args.seed,
+        resume_from_checkpoint=(
+            args.resume_from_checkpoint.resolve()
+            if args.resume_from_checkpoint is not None
+            else None
+        ),
     )
 
     if settings.steps <= 0:
@@ -328,10 +380,15 @@ def main() -> int:
 
     checkpoint_dir = output / "checkpoints"
     existing_checkpoints = list(checkpoint_dir.glob("model_*.pkl"))
-    if existing_checkpoints:
+    if settings.resume_from_checkpoint is not None:
+        if not settings.resume_from_checkpoint.is_file():
+            raise FileNotFoundError(
+                f"Resume checkpoint not found: {settings.resume_from_checkpoint}"
+            )
+    elif existing_checkpoints:
         raise FileExistsError(
             f"Existing checkpoints found in {checkpoint_dir}; choose a new --output "
-            "directory to avoid mixing runs."
+            "directory or pass --resume-from-checkpoint."
         )
 
     command = build_command(
