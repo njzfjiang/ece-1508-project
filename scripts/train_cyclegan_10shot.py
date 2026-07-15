@@ -82,6 +82,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--steps", type=int, default=100)
     parser.add_argument("--resolution", type=int, choices=[256, 512], default=256)
     parser.add_argument(
+        "--lora-rank-unet",
+        type=int,
+        default=4,
+        help="LoRA rank for the SD-Turbo U-Net adapters (default: 4)",
+    )
+    parser.add_argument(
+        "--lora-rank-vae",
+        type=int,
+        default=4,
+        help="LoRA rank for the SD-Turbo VAE adapters (default: 4)",
+    )
+    parser.add_argument(
         "--precision", choices=["no", "fp16", "bf16"], default="fp16"
     )
     parser.add_argument(
@@ -139,11 +151,26 @@ def validate_upstream_trainer(trainer: Path) -> None:
             f"Upstream trainer not found: {trainer}\n"
             "Run: python scripts/setup.py --skip-install --skip-prepare"
         )
-    source = trainer.read_text(encoding="utf-8")
-    if "args.skip_training_validation" not in source:
+    model = trainer.with_name("cyclegan_turbo.py")
+    required = {
+        trainer: (
+            "args.skip_training_validation",
+            'sd["sd_unet_conv_in"] = base_conv_in.state_dict()',
+        ),
+        model: ('base_conv_in.load_state_dict(sd["sd_unet_conv_in"])',),
+    }
+    missing = []
+    for path, markers in required.items():
+        if not path.is_file():
+            missing.append(str(path))
+            continue
+        source = path.read_text(encoding="utf-8")
+        missing.extend(marker for marker in markers if marker not in source)
+    if missing:
         raise RuntimeError(
             "The upstream CycleGAN trainer has not received this project's "
-            "compatibility patch. Re-run scripts/setup.py."
+            "current compatibility patch. Re-run scripts/setup.py. "
+            f"Missing markers: {missing}"
         )
 
 
@@ -272,6 +299,8 @@ def main() -> int:
         raise ValueError("--shots must be positive")
     if args.seed <= 0:
         raise ValueError("--seed must be positive")
+    if args.lora_rank_unet <= 0 or args.lora_rank_vae <= 0:
+        raise ValueError("LoRA ranks must be positive")
 
     split_name = f"{args.shots}shot"
     seed_name = f"seed{args.seed}"
@@ -287,6 +316,8 @@ def main() -> int:
         steps=args.steps,
         checkpoint_every=args.steps,
         precision=args.precision,
+        lora_rank_unet=args.lora_rank_unet,
+        lora_rank_vae=args.lora_rank_vae,
         seed=args.seed,
     )
 
