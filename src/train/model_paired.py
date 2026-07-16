@@ -46,6 +46,12 @@ def parse_args() -> argparse.Namespace:
         help="List of random seeds for few-shot training",
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument(
+        "--gpu",
+        type=int,
+        default=0,
+        help="Physical GPU index exposed to this single-process training run",
+    )
     return parser.parse_args()
 
 
@@ -71,6 +77,14 @@ def build_train_command(
         sys.executable,
         "-m",
         "accelerate.commands.launch",
+        "--num_processes",
+        "1",
+        "--num_machines",
+        "1",
+        "--mixed_precision",
+        str(training["mixed_precision"]),
+        "--dynamo_backend",
+        "no",
         str(script_path),
         "--pretrained_model_name_or_path",
         str(training["model"]),
@@ -130,8 +144,9 @@ def build_train_command(
     return command
 
 # We want disable external logging (e.g., WandB) as we want faster, cleaner and offline training runs.
-def training_environment(config: dict) -> dict[str, str]:
+def training_environment(config: dict, gpu: int) -> dict[str, str]:
     environment = os.environ.copy()
+    environment["CUDA_VISIBLE_DEVICES"] = str(gpu)
     if not config["logging"]["use_wandb"]:
         environment["WANDB_MODE"] = "disabled"
     return environment
@@ -155,6 +170,7 @@ def train_model(
     output_root: Path,
     script_path: Path,
     config: dict,
+    gpu: int,
 ) -> None:
     for shot in shots:
         for seed in seeds:
@@ -184,7 +200,7 @@ def train_model(
             subprocess.run(
                 command,
                 check=True,
-                env=training_environment(config),
+                env=training_environment(config, gpu),
             )
             expected = (
                 output_dir
@@ -214,6 +230,7 @@ def main() -> int:
         output_root=output_root,
         script_path=script_path,
         config=config,
+        gpu=args.gpu,
     )
     print(f"\nPix2pix training completed. Checkpoints: {output_root}")
     return 0

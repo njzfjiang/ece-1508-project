@@ -64,6 +64,12 @@ def parse_args():
     parser.add_argument("--metrics", nargs="+")
 
     parser.add_argument("--use-fp16", action="store_true")
+    parser.add_argument(
+        "--gpus",
+        nargs="+",
+        type=int,
+        help="Run independent training jobs concurrently on these GPU indices",
+    )
 
     parser.add_argument("--skip-training", action="store_true")
     parser.add_argument("--skip-generation", action="store_true")
@@ -93,27 +99,21 @@ def main():
 
     # Training
     if not args.skip_training:
-
-        for model in args.models:
-
-            script = (
-                PROJECT_ROOT / "src/train/model_paired.py"
-                if model == "pix2pix"
-                else PROJECT_ROOT / "src/train/model_unpaired.py"
-            )
-
-            run(
-                [
-                    sys.executable,
-                    str(script),
-                    "--shots",
-                    *map(str, args.shots),
-                    "--seeds",
-                    *map(str, args.seeds),
-                    "--config",
-                    str(args.config.resolve()),
-                ]
-            )
+        training_cmd = [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts/train_models.py"),
+            "--models",
+            *args.models,
+            "--shots",
+            *map(str, args.shots),
+            "--seeds",
+            *map(str, args.seeds),
+            "--config",
+            str(args.config.resolve()),
+        ]
+        if args.gpus:
+            training_cmd += ["--gpus", *map(str, args.gpus)]
+        run(training_cmd)
 
     # Generate samples
     if not args.skip_generation:

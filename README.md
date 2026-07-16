@@ -134,6 +134,7 @@ Useful flags:
 - `--prompt "..."`: override the generation prompt
 - `--metrics ssim lpips clip_similarity cmmd`: override the evaluation metrics
 - `--use-fp16`: enable fp16 during generation when supported
+- `--gpus 0 1 ...`: assign independent training runs across the listed GPUs
 
 ## Training Only
 
@@ -150,6 +151,22 @@ python scripts/train_models.py \
   --seeds 1 \
   --config configs/smoke.yaml
 ```
+
+On a multi-GPU machine, distribute independent model/shot/seed runs without
+changing the per-run batch size or optimizer semantics:
+
+```bash
+python scripts/train_models.py \
+  --models cyclegan pix2pix \
+  --shots 10 20 50 \
+  --seeds 1 2 3 \
+  --config configs/base.yaml \
+  --gpus 0 1
+```
+
+Each GPU runs at most one subprocess at a time. Jobs are pulled from a shared
+queue as GPUs become available. This is run-level parallelism; each individual
+training job intentionally remains single-process rather than using DDP.
 
 `configs/base.yaml` uses batch size 1 for the validated 512-pixel runs.
 CycleGAN additionally uses FP16, gradient checkpointing, zero dataloader
