@@ -45,13 +45,13 @@ def parse_args():
     parser.add_argument(
         "--checkpoint-root",
         type=Path,
-        default=Path("outputs"),
+        help="Exact model checkpoint root; only valid with one selected model",
     )
 
     parser.add_argument(
         "--test-root",
         type=Path,
-        default=Path("data/processed/test"),
+        default=PROJECT_ROOT / "data" / "processed" / "test",
     )
 
     parser.add_argument("--test-samples", type=int)
@@ -84,6 +84,11 @@ def main():
 
     args = parse_args()
 
+    if args.checkpoint_root is not None and len(args.models) != 1:
+        raise ValueError("--checkpoint-root requires exactly one selected model")
+    if args.test_samples is not None and args.test_samples <= 0:
+        raise ValueError("--test-samples must be positive")
+
     print("\n==================== Starting Experiment ====================")
 
     # Training
@@ -106,7 +111,7 @@ def main():
                     "--seeds",
                     *map(str, args.seeds),
                     "--config",
-                    str(args.config),
+                    str(args.config.resolve()),
                 ]
             )
 
@@ -122,15 +127,16 @@ def main():
             *map(str, args.shots),
             "--seeds",
             *map(str, args.seeds),
-            "--checkpoint-root",
-            str(args.checkpoint_root),
             "--test-root",
             str(args.test_root),
             "--config",
-            str(args.config),
+            str(args.config.resolve()),
             "--prompt",
             args.prompt,
         ]
+
+        if args.checkpoint_root is not None:
+            cmd += ["--checkpoint-root", str(args.checkpoint_root)]
 
         if args.test_samples:
             cmd += [
@@ -158,8 +164,11 @@ def main():
             "--test-root",
             str(args.test_root),
             "--config",
-            str(args.config),
+            str(args.config.resolve()),
         ]
+
+        if args.test_samples:
+            cmd += ["--test-samples", str(args.test_samples)]
 
         if args.metrics:
             cmd += [

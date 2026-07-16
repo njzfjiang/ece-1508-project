@@ -185,6 +185,13 @@ def train_model(
                 check=True,
                 env=training_environment(config),
             )
+            expected = (
+                output_dir
+                / "checkpoints"
+                / f"model_{int(config['training']['max_train_steps'])}.pkl"
+            )
+            if not expected.is_file():
+                raise RuntimeError(f"Training ended without final checkpoint: {expected}")
 
 
 def main() -> int:

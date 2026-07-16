@@ -18,8 +18,11 @@ supervision behave under limited data.
 - `src/`: training and evaluation code
 
 ## Setup
+
 ### DarkDriving Dataset (ICRA 2026)
+
 **Manual Download Steps:**
+
 1. Go to the official repository: https://github.com/DriveMindLab/DarkDriving-ICRA-2026
 2. Download **DarkDriving_lle** from the [OneDrive link](https://onedrive.live.com/?id=64492CF1FC56CDDE%21s07d39562e06943cbb357c24a9708a0cb&cid=64492CF1FC56CDDE&redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvYy82NDQ5MmNmMWZjNTZjZGRlL0lnQmlsZE1IYWVETFE3Tlh3a3FYQ0tETEFiVnJrN3N5RjBsaElJdTNQU1ZKVVBVP2U9c01KUDJU) provided in the README
 3. Extract the archive to `data/raw/`:
@@ -43,8 +46,9 @@ python scripts/setup.py
 ```
 
 The setup script prepares the vendored `img2img-turbo` code and the processed
-few-shot splits. If you already have the processed data and only want to patch
-the vendored training tree, use:
+few-shot splits. It also applies the repository's replayable pix2pix and
+CycleGAN compatibility and memory patches. If you already have the processed
+data and only want to patch the vendored training tree, use:
 
 ```bash
 python scripts/setup.py --skip-install --skip-prepare
@@ -104,8 +108,17 @@ It iterates over every requested model, shot count, and seed, then runs:
 By default it runs both `pix2pix` and `cyclegan` for `10`, `20`, and `50`
 shots with seeds `1`, `2`, and `3`.
 
+This is the complete 18-run grid, so use explicit models, shots, and seeds for
+pilots rather than starting the default command accidentally:
+
 ```bash
-python scripts/run_experiment.py
+python scripts/run_experiment.py \
+  --models cyclegan \
+  --shots 10 \
+  --seeds 1 \
+  --config configs/base.yaml \
+  --test-samples 200 \
+  --generate-summary
 ```
 
 Useful flags:
@@ -128,6 +141,21 @@ The training scripts live under `src/train/` and are invoked by the orchestrator
 The paired pipeline is handled by `src/train/model_paired.py`, and the unpaired
 pipeline is handled by `src/train/model_unpaired.py`.
 
+Run selected training launchers without generation or evaluation:
+
+```bash
+python scripts/train_models.py \
+  --models pix2pix cyclegan \
+  --shots 10 \
+  --seeds 1 \
+  --config configs/smoke.yaml
+```
+
+`configs/base.yaml` uses batch size 1 for the validated 512-pixel runs.
+CycleGAN additionally uses FP16, gradient checkpointing, zero dataloader
+workers, and less frequent checkpoints. Its smoke configuration uses
+256-pixel preprocessing.
+
 The default training output root is controlled by `configs/base.yaml`:
 
 - `pix2pix_turbo.output_dir`: paired training checkpoints
@@ -138,6 +166,30 @@ The default training output root is controlled by `configs/base.yaml`:
 The generation script is `scripts/generate_samples.py` and the evaluation script
 is `scripts/evaluate_samples.py`. Both loop over the requested models, shots,
 and seeds, and write their outputs into the `results/` tree.
+
+The configured per-model checkpoint roots are used automatically:
+
+```bash
+python scripts/generate_samples.py \
+  --models pix2pix \
+  --shots 10 \
+  --seeds 1 \
+  --config configs/base.yaml \
+  --test-samples 200
+
+python scripts/evaluate_samples.py \
+  --models pix2pix \
+  --shots 10 \
+  --seeds 1 \
+  --config configs/base.yaml \
+  --test-samples 200 \
+  --generate-summary
+```
+
+Generation writes a manifest containing the checkpoint, checkpoint step,
+prompt, test root, and filenames. Evaluation carries that manifest into its
+result metadata. `--test-samples` must be identical across generation and
+evaluation; the full orchestrator forwards it to both stages.
 
 Generation output is written under:
 
@@ -175,3 +227,11 @@ The default configuration is `configs/base.yaml`. It controls:
 - logging behavior
 
 `configs/smoke.yaml` can be used for a quick test run with a smaller setup.
+
+## Tests
+
+The CPU-only launcher and evaluation tests do not download model weights:
+
+```bash
+python -m pytest -q
+```

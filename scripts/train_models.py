@@ -1,4 +1,4 @@
-"""Run the currently implemented few-shot training launcher."""
+"""Run selected few-shot training launchers."""
 
 from __future__ import annotations
 
@@ -12,6 +12,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=["pix2pix", "cyclegan"],
+        default=["pix2pix", "cyclegan"],
+    )
     parser.add_argument(
         "--shots",
         nargs="+",
@@ -36,31 +42,23 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    pix2pix_command = [
-        sys.executable,
-        str(PROJECT_ROOT / "src" / "train" / "model_paired.py"),
-        "--shots",
-        *map(str, args.shots),
-        "--seeds",
-        *map(str, args.seeds),
-        "--config",
-        str(args.config.resolve()),
-    ]
-    print("[CMD]", " ".join(pix2pix_command))
-    subprocess.run(pix2pix_command, check=True)
-    
-    cyclegan_command = [
-        sys.executable,
-        str(PROJECT_ROOT / "src" / "train" / "model_unpaired.py"),
-        "--shots",
-        *map(str, args.shots),
-        "--seeds",
-        *map(str, args.seeds),
-        "--config",
-        str(args.config.resolve()),
-    ]
-    print("[CMD]", " ".join(cyclegan_command))
-    subprocess.run(cyclegan_command, check=True)
+    scripts = {
+        "pix2pix": PROJECT_ROOT / "src" / "train" / "model_paired.py",
+        "cyclegan": PROJECT_ROOT / "src" / "train" / "model_unpaired.py",
+    }
+    for model in args.models:
+        command = [
+            sys.executable,
+            str(scripts[model]),
+            "--shots",
+            *map(str, args.shots),
+            "--seeds",
+            *map(str, args.seeds),
+            "--config",
+            str(args.config.resolve()),
+        ]
+        print("[CMD]", " ".join(command))
+        subprocess.run(command, check=True)
 
     return 0
 

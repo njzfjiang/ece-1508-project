@@ -1,0 +1,73 @@
+diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
+--- a/src/train_cyclegan_turbo.py
++++ b/src/train_cyclegan_turbo.py
+@@ -187,12 +187,15 @@ def main(args):
+                 cyc_rec_a = CycleGAN_Turbo.forward_with_networks(cyc_fake_b, "b2a", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_b2a_emb)
+                 loss_cycle_a = crit_cycle(cyc_rec_a, img_a) * args.lambda_cycle
+                 loss_cycle_a += net_lpips(cyc_rec_a, img_a).mean() * args.lambda_cycle_lpips
++                # Backward each direction before constructing the next graph to
++                # keep CycleGAN-Turbo's peak activation memory bounded.
++                accelerator.backward(loss_cycle_a, retain_graph=False)
+                 # B -> fake A -> rec B
+                 cyc_fake_a = CycleGAN_Turbo.forward_with_networks(img_b, "b2a", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_b2a_emb)
+                 cyc_rec_b = CycleGAN_Turbo.forward_with_networks(cyc_fake_a, "a2b", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_a2b_emb)
+                 loss_cycle_b = crit_cycle(cyc_rec_b, img_b) * args.lambda_cycle
+                 loss_cycle_b += net_lpips(cyc_rec_b, img_b).mean() * args.lambda_cycle_lpips
+-                accelerator.backward(loss_cycle_a + loss_cycle_b, retain_graph=False)
++                accelerator.backward(loss_cycle_b, retain_graph=False)
+                 if accelerator.sync_gradients:
+                     accelerator.clip_grad_norm_(params_gen, args.max_grad_norm)
+     
+@@ -206,11 +209,12 @@ def main(args):
+                 """
+                 Generator Objective (GAN) for task a->b and b->a (fake inputs)
+                 """
+-                fake_a = CycleGAN_Turbo.forward_with_networks(img_b, "b2a", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_b2a_emb)
+                 fake_b = CycleGAN_Turbo.forward_with_networks(img_a, "a2b", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_a2b_emb)
+                 loss_gan_a = net_disc_a(fake_b, for_G=True).mean() * args.lambda_gan
++                accelerator.backward(loss_gan_a, retain_graph=False)
++                fake_a = CycleGAN_Turbo.forward_with_networks(img_b, "b2a", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_b2a_emb)
+                 loss_gan_b = net_disc_b(fake_a, for_G=True).mean() * args.lambda_gan
+-                accelerator.backward(loss_gan_a + loss_gan_b, retain_graph=False)
++                accelerator.backward(loss_gan_b, retain_graph=False)
+                 if accelerator.sync_gradients:
+                     accelerator.clip_grad_norm_(params_gen, args.max_grad_norm)
+                 optimizer_gen.step()
+@@ -225,11 +229,12 @@ def main(args):
+                 idt_a = CycleGAN_Turbo.forward_with_networks(img_b, "a2b", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_a2b_emb)
+                 loss_idt_a = crit_idt(idt_a, img_b) * args.lambda_idt
+                 loss_idt_a += net_lpips(idt_a, img_b).mean() * args.lambda_idt_lpips
++                accelerator.backward(loss_idt_a, retain_graph=False)
+                 idt_b = CycleGAN_Turbo.forward_with_networks(img_a, "b2a", vae_enc, unet, vae_dec, noise_scheduler_1step, timesteps, fixed_b2a_emb)
+                 loss_idt_b = crit_idt(idt_b, img_a) * args.lambda_idt
+                 loss_idt_b += net_lpips(idt_b, img_a).mean() * args.lambda_idt_lpips
+                 loss_g_idt = loss_idt_a + loss_idt_b
+-                accelerator.backward(loss_g_idt, retain_graph=False)
++                accelerator.backward(loss_idt_b, retain_graph=False)
+                 if accelerator.sync_gradients:
+                     accelerator.clip_grad_norm_(params_gen, args.max_grad_norm)
+                 optimizer_gen.step()
+@@ -241,9 +246,10 @@ def main(args):
+                 Discriminator for task a->b and b->a (fake inputs)
+                 """
+                 loss_D_A_fake = net_disc_a(fake_b.detach(), for_real=False).mean() * args.lambda_gan
++                accelerator.backward(loss_D_A_fake * 0.5, retain_graph=False)
+                 loss_D_B_fake = net_disc_b(fake_a.detach(), for_real=False).mean() * args.lambda_gan
+                 loss_D_fake = (loss_D_A_fake + loss_D_B_fake) * 0.5
+-                accelerator.backward(loss_D_fake, retain_graph=False)
++                accelerator.backward(loss_D_B_fake * 0.5, retain_graph=False)
+                 if accelerator.sync_gradients:
+                     params_to_clip = list(net_disc_a.parameters()) + list(net_disc_b.parameters())
+                     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+@@ -256,9 +262,10 @@ def main(args):
+                 Discriminator for task a->b and b->a (real inputs)
+                 """
+                 loss_D_A_real = net_disc_a(img_b, for_real=True).mean() * args.lambda_gan
++                accelerator.backward(loss_D_A_real * 0.5, retain_graph=False)
+                 loss_D_B_real = net_disc_b(img_a, for_real=True).mean() * args.lambda_gan
+                 loss_D_real = (loss_D_A_real + loss_D_B_real) * 0.5
+-                accelerator.backward(loss_D_real, retain_graph=False)
++                accelerator.backward(loss_D_B_real * 0.5, retain_graph=False)
+                 if accelerator.sync_gradients:
+                     params_to_clip = list(net_disc_a.parameters()) + list(net_disc_b.parameters())
+                     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)

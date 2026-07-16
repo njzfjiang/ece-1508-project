@@ -11,7 +11,7 @@ data:
 training:
   model: "stabilityai/sd-turbo"
   resolution: 512
-  batch_size: 4
+  batch_size: 1
   num_workers: 4
   learning_rate: 5.0e-6
   max_train_steps: 10000
@@ -41,6 +41,12 @@ pix2pix_turbo:
 cyclegan_turbo:
   output_dir: "outputs/cyclegan_turbo/train"
   tracker_project_name: "cyclegan_turbo_darkdriving"
+  # Runtime values not listed here inherit from training; keep only overrides.
+  batch_size: 1
+  num_workers: 0
+  checkpointing_steps: 2000
+  mixed_precision: "fp16"
+  gradient_checkpointing: true
   lora_rank_unet: 4
   lora_rank_vae: 4
   lambda_cycle: 1.0
@@ -50,6 +56,10 @@ cyclegan_turbo:
   lambda_gan: 0.5
   train_image_prep: "resize_512x512"
   val_image_prep: "resize_512x512"
+  validation_steps: 500
+  validation_num_images: 1
+  skip_training_validation: true
+  allow_tf32: false
 
 # Evaluation
 eval:

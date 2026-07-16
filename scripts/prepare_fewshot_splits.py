@@ -84,7 +84,16 @@ def get_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
         f.name: f for f in night_dir.iterdir() if f.suffix.lower() in IMAGE_EXTENSIONS
     }
 
-    names = sorted(day.keys() & night.keys())
+    missing_night = sorted(day.keys() - night.keys())
+    missing_day = sorted(night.keys() - day.keys())
+    if missing_day or missing_night:
+        raise ValueError(
+            "Dataset is not filename-aligned: "
+            f"missing day={missing_day[:3]}, missing night={missing_night[:3]}"
+        )
+    names = sorted(day)
+    if not names:
+        raise ValueError(f"No paired images found in {day_dir} and {night_dir}")
     return [(day[n], night[n]) for n in names]
 
 

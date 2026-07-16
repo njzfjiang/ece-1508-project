@@ -12,7 +12,15 @@ from .utils import load_rgb, resize8
 
 EXT_SRC = Path(__file__).resolve().parents[2] / "external/img2img-turbo/src"
 
-def generate(model, checkpoint, pairs, out, prompt, fp16=False):
+def generate(
+    model,
+    checkpoint,
+    pairs,
+    out,
+    prompt,
+    fp16=False,
+    cyclegan_image_prep="resize_512x512",
+):
     if str(EXT_SRC) not in sys.path:
         sys.path.insert(0, str(EXT_SRC))
     out.mkdir(parents=True, exist_ok=True)
@@ -27,6 +35,7 @@ def generate(model, checkpoint, pairs, out, prompt, fp16=False):
             raise RuntimeError(f"Could not import pix2pix_turbo from {EXT_SRC}: {e}")
 
         net = Pix2Pix_Turbo(pretrained_path=str(checkpoint)).cuda()
+        net.set_eval()
 
     elif model == "cyclegan":
         try:
@@ -40,7 +49,7 @@ def generate(model, checkpoint, pairs, out, prompt, fp16=False):
         except Exception:
             pass
         build_transform = importlib.import_module("my_utils.training_utils").build_transform
-        transform = build_transform("resize_512x512")
+        transform = build_transform(cyclegan_image_prep)
     
     else:
         raise ValueError(f"Unknown model: {model}")

@@ -1,6 +1,6 @@
 # configs/smoke.yaml
 # Smoke test configuration - overrides base.yaml for quick VPS validation
-# Usage: python scripts/run_experiments.py --config configs/smoke.yaml --shots 10 --seeds 1
+# Usage: python scripts/run_experiment.py --config configs/smoke.yaml --shots 10 --seeds 1
 
 data:
   root: "data/processed"
@@ -38,6 +38,10 @@ pix2pix_turbo:
 # Training - CycleGAN-Turbo (unpaired)
 cyclegan_turbo:
   output_dir: "outputs/smoke/cyclegan_turbo/train"
+  tracker_project_name: "cyclegan_turbo_darkdriving"
+  resolution: 256
+  mixed_precision: "fp16"
+  gradient_checkpointing: true
   lora_rank_unet: 4
   lora_rank_vae: 4
   lambda_cycle: 1.0
@@ -45,8 +49,12 @@ cyclegan_turbo:
   lambda_identity: 1.0
   lambda_identity_lpips: 1.0
   lambda_gan: 0.5
-  train_image_prep: "resize_512x512"
-  val_image_prep: "resize_512x512"
+  train_image_prep: "resize_256x256"
+  val_image_prep: "resize_256x256"
+  validation_steps: 500
+  validation_num_images: 1
+  skip_training_validation: true
+  allow_tf32: false
 
 # Evaluation
 eval:
@@ -58,7 +66,7 @@ eval:
     cyclegan: "${cyclegan_turbo.output_dir}"
   clip_model: "ViT-B/32"
   lpips_backbone: "alex"  # or "vgg"
-  test_samples: 200
+  test_samples: 1
   cmmd_sigma: 1.0
 
 # Logging
@@ -66,5 +74,5 @@ logging:
   use_wandb: false  # set to true if you have wandb account
   log_dir: "results/logs"
   checkpoint_dir: "results/checkpoints"
-  figure_dir: "results/figures"             # smoke test 不开 wandb，省去网络开销
+  figure_dir: "results/figures"
 
