@@ -292,7 +292,7 @@ index 2e3143c..640523b 100644
          feat_model = build_feature_extractor("clean", "cuda", use_dataparallel=False)
          """
          FID reference statistics for A -> B translation
-@@ -147,12 +372,27 @@ def main(args):
+@@ -147,12 +372,38 @@ def main(args):
      net_lpips, optimizer_gen, optimizer_disc, train_dataloader, lr_scheduler_gen, lr_scheduler_disc = accelerator.prepare(
          net_lpips, optimizer_gen, optimizer_disc, train_dataloader, lr_scheduler_gen, lr_scheduler_disc
      )
@@ -314,6 +314,17 @@ index 2e3143c..640523b 100644
 +        loss_csv_handle, loss_csv_writer = prepare_loss_csv(
 +            os.path.join(args.output_dir, "losses.csv"), global_step
 +        )
++        if global_step == 0 and args.preview_steps:
++            save_a2b_preview(
++                l_images_src_test[0], args.output_dir, 0, T_val,
++                accelerator.unwrap_model(vae_enc),
++                accelerator.unwrap_model(unet),
++                accelerator.unwrap_model(vae_dec),
++                noise_scheduler_1step, fixed_a2b_emb_base,
++                accelerator.device, weight_dtype,
++            )
++            gc.collect()
++            torch.cuda.empty_cache()
 +
      first_epoch = 0
 -    global_step = 0

@@ -186,6 +186,7 @@ def validate_upstream_trainer(trainer: Path) -> None:
             'sd["sd_unet_conv_in"] = base_conv_in.state_dict()',
             "args.resume_from_checkpoint",
             'os.path.join(args.output_dir, "losses.csv")',
+            "if global_step == 0 and args.preview_steps:",
         ),
         model: ('base_conv_in.load_state_dict(sd["sd_unet_conv_in"])',),
     }
