@@ -156,10 +156,19 @@ CycleGAN additionally uses FP16, gradient checkpointing, zero dataloader
 workers, and less frequent checkpoints. Its smoke configuration uses
 256-pixel preprocessing.
 
+The formal comparison uses a common budget of 4,000 optimizer steps for both
+models. Each run writes a structured `losses.csv` beside its checkpoints, so
+training curves do not depend on terminal scrollback or W&B availability.
+
 The default training output root is controlled by `configs/base.yaml`:
 
 - `pix2pix_turbo.output_dir`: paired training checkpoints
 - `cyclegan_turbo.output_dir`: unpaired training checkpoints
+
+CycleGAN checkpoints store the three U-Net LoRA adapters and the separately
+optimized base `conv_in` layer. The loader remains compatible with older
+checkpoints that do not contain `sd_unet_conv_in`, although that missing
+trained layer cannot be reconstructed retroactively.
 
 ## Generation And Evaluation
 

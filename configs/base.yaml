@@ -14,7 +14,7 @@ training:
   batch_size: 1
   num_workers: 4
   learning_rate: 5.0e-6
-  max_train_steps: 10000
+  max_train_steps: 4000
   checkpointing_steps: 500
   mixed_precision: "no"  # switch to fp16 only after applying the FP16 patch
   enable_xformers: true

@@ -17,6 +17,7 @@ REQUIRED_VENDOR_MARKERS = (
     "max_train_steps is the authoritative stopping condition",
     "Keep trainable parameters in FP32",
     "Optimizer parameters must be unique by identity",
+    'os.path.join(args.output_dir, "losses.csv")',
 )
 
 

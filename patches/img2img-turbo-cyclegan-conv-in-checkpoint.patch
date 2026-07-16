@@ -1,0 +1,28 @@
+diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
+--- a/src/train_cyclegan_turbo.py
++++ b/src/train_cyclegan_turbo.py
+@@ -311,5 +311,9 @@ def main(args):
+                         sd["sd_decoder"] = get_peft_model_state_dict(eval_unet, adapter_name="default_decoder")
+                         sd["sd_other"] = get_peft_model_state_dict(eval_unet, adapter_name="default_others")
++                        # conv_in is optimized as a full base layer in addition
++                        # to its LoRA adapter, so it must be saved explicitly.
++                        base_conv_in = getattr(eval_unet.conv_in, "base_layer", eval_unet.conv_in)
++                        sd["sd_unet_conv_in"] = base_conv_in.state_dict()
+                         sd["rank_vae"] = args.lora_rank_vae
+                         sd["vae_lora_target_modules"] = vae_lora_target_modules
+                         sd["sd_vae_enc"] = eval_vae_enc.state_dict()
+diff --git a/src/cyclegan_turbo.py b/src/cyclegan_turbo.py
+--- a/src/cyclegan_turbo.py
++++ b/src/cyclegan_turbo.py
+@@ -178,6 +178,11 @@ class CycleGAN_Turbo(torch.nn.Module):
+             name_sd = n.replace(".default_others.weight", ".weight")
+             if "lora" in n and "default_others" in n:
+                 p.data.copy_(sd["sd_other"][name_sd])
++        # Older checkpoints did not store the separately optimized base
++        # conv_in; they remain loadable with the original SD-Turbo weight.
++        if "sd_unet_conv_in" in sd:
++            base_conv_in = getattr(self.unet.conv_in, "base_layer", self.unet.conv_in)
++            base_conv_in.load_state_dict(sd["sd_unet_conv_in"])
+         self.unet.set_adapter(["default_encoder", "default_decoder", "default_others"])
+ 
+         vae_lora_config = LoraConfig(r=sd["rank_vae"], init_lora_weights="gaussian", target_modules=sd["vae_lora_target_modules"])

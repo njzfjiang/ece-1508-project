@@ -21,10 +21,13 @@ REQUIRED_TRAIN_MARKERS = (
     "max_train_steps is the authoritative stopping condition for CycleGAN-Turbo",
     "Skip training-time FID initialization when formal evaluation is external",
     "Backward each direction before constructing the next graph",
+    'sd["sd_unet_conv_in"] = base_conv_in.state_dict()',
+    'os.path.join(args.output_dir, "losses.csv")',
 )
 REQUIRED_MODEL_MARKERS = (
     "Keep pretrained VAE weights frozen",
     "LoRA-wrapped skip convolutions expose adapter parameters twice",
+    'base_conv_in.load_state_dict(sd["sd_unet_conv_in"])',
 )
 
 

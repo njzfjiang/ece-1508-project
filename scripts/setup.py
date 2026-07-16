@@ -21,6 +21,8 @@ PATCHES = [
     PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-training.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-memory.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-sequential-backward.patch",
+    PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-conv-in-checkpoint.patch",
+    PROJECT_ROOT / "patches" / "img2img-turbo-training-loss-csv.patch",
 ]
 REQUIRED_SUBDIRS = ["train/day", "train/night", "test/day", "test/night"]
 

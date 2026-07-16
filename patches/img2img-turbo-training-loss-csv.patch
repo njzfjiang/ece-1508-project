@@ -1,0 +1,106 @@
+diff --git a/src/train_pix2pix_turbo.py b/src/train_pix2pix_turbo.py
+--- a/src/train_pix2pix_turbo.py
++++ b/src/train_pix2pix_turbo.py
+@@ -1,5 +1,6 @@
+ import os
+ import gc
++import csv
+ import lpips
+ import clip
+ import numpy as np
+@@ -142,5 +143,16 @@ def main(args):
+         tracker_config = dict(vars(args))
+         accelerator.init_trackers(args.tracker_project_name, config=tracker_config)
+ 
++    loss_csv_handle = None
++    loss_csv_writer = None
++    if accelerator.is_main_process:
++        loss_csv_handle = open(os.path.join(args.output_dir, "losses.csv"), "w", newline="", encoding="utf-8")
++        loss_csv_writer = csv.DictWriter(
++            loss_csv_handle,
++            fieldnames=("step", "lossG", "lossD", "loss_l2", "loss_lpips", "loss_clipsim", "lr"),
++        )
++        loss_csv_writer.writeheader()
++        loss_csv_handle.flush()
++
+     progress_bar = tqdm(total=args.max_train_steps, initial=0, desc="Steps",
+         disable=not accelerator.is_local_main_process,)
+@@ -242,6 +254,18 @@ def main(args):
+                     if args.lambda_clipsim > 0:
+                         logs["loss_clipsim"] = loss_clipsim.detach().item()
+                     progress_bar.set_postfix(**logs)
++                    loss_csv_writer.writerow(
++                        {
++                            "step": global_step,
++                            "lossG": logs["lossG"],
++                            "lossD": logs["lossD"],
++                            "loss_l2": logs["loss_l2"],
++                            "loss_lpips": logs["loss_lpips"],
++                            "loss_clipsim": logs.get("loss_clipsim"),
++                            "lr": optimizer.param_groups[0]["lr"],
++                        }
++                    )
++                    loss_csv_handle.flush()
+ 
+                     # viz some images
+                     if global_step % args.viz_freq == 0:
+@@ -310,6 +334,8 @@ def main(args):
+                 break
+ 
+     accelerator.wait_for_everyone()
++    if loss_csv_handle is not None:
++        loss_csv_handle.close()
+     accelerator.end_training()
+ 
+ 
+diff --git a/src/train_cyclegan_turbo.py b/src/train_cyclegan_turbo.py
+--- a/src/train_cyclegan_turbo.py
++++ b/src/train_cyclegan_turbo.py
+@@ -1,5 +1,6 @@
+ import os
+ import gc
++import csv
+ import copy
+ import lpips
+ import torch
+@@ -153,6 +154,17 @@ def main(args):
+     if accelerator.is_main_process:
+         accelerator.init_trackers(args.tracker_project_name, config=dict(vars(args)))
+ 
++    loss_csv_handle = None
++    loss_csv_writer = None
++    if accelerator.is_main_process:
++        loss_csv_handle = open(os.path.join(args.output_dir, "losses.csv"), "w", newline="", encoding="utf-8")
++        loss_csv_writer = csv.DictWriter(
++            loss_csv_handle,
++            fieldnames=("step", "cycle_a", "cycle_b", "gan_a", "gan_b", "disc_a", "disc_b", "idt_a", "idt_b", "lr_gen", "lr_disc"),
++        )
++        loss_csv_writer.writeheader()
++        loss_csv_handle.flush()
++
+     first_epoch = 0
+     global_step = 0
+     progress_bar = tqdm(total=args.max_train_steps, initial=global_step, desc="Steps",
+@@ -285,6 +297,13 @@ def main(args):
+                     eval_unet = accelerator.unwrap_model(unet)
+                     eval_vae_enc = accelerator.unwrap_model(vae_enc)
+                     eval_vae_dec = accelerator.unwrap_model(vae_dec)
++                    loss_csv_writer.writerow(
++                        {"step": global_step, **logs,
++                         "lr_gen": optimizer_gen.param_groups[0]["lr"],
++                         "lr_disc": optimizer_disc.param_groups[0]["lr"]}
++                    )
++                    loss_csv_handle.flush()
++
+                     if global_step % args.viz_freq == 0:
+                         for tracker in accelerator.trackers:
+                             if tracker.name == "wandb":
+@@ -400,6 +419,8 @@ def main(args):
+                 break
+ 
+     accelerator.wait_for_everyone()
++    if loss_csv_handle is not None:
++        loss_csv_handle.close()
+     accelerator.end_training()
+ 
+ 
