@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    command = [
+    pix2pix_command = [
         sys.executable,
         str(PROJECT_ROOT / "src" / "train" / "model_paired.py"),
         "--shots",
@@ -46,12 +46,22 @@ def main() -> int:
         "--config",
         str(args.config.resolve()),
     ]
-    print("[CMD]", " ".join(command))
-    subprocess.run(command, check=True)
-    print(
-        "CycleGAN training is not run yet because src/train/model_unpaired.py "
-        "is still a placeholder."
-    )
+    print("[CMD]", " ".join(pix2pix_command))
+    subprocess.run(pix2pix_command, check=True)
+    
+    cyclegan_command = [
+        sys.executable,
+        str(PROJECT_ROOT / "src" / "train" / "model_unpaired.py"),
+        "--shots",
+        *map(str, args.shots),
+        "--seeds",
+        *map(str, args.seeds),
+        "--config",
+        str(args.config.resolve()),
+    ]
+    print("[CMD]", " ".join(cyclegan_command))
+    subprocess.run(cyclegan_command, check=True)
+
     return 0
 
 

@@ -12,6 +12,20 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 
 def parse_args():
+    """
+    Parse command-line arguments.
+
+    Available arguments:
+        --raw_dir: Path to the raw DarkDriving dataset.
+        --output_root: Path to the output directory for few-shot splits.
+        --test_dir: Path to the output directory for the test set.
+        --shots: List of shot sizes for few-shot splits.
+        --seeds: List of random seeds for few-shot splits.
+        --mode: Method for linking or copying files (auto, hardlink, symlink, copy).
+        --overwrite: Whether to overwrite existing output directories.
+        --source_prompt: Prompt for the source images (day).
+        --target_prompt: Prompt for the target images (night).
+    """
     p = argparse.ArgumentParser()
 
     p.add_argument("--raw_dir", type=Path, required=True)

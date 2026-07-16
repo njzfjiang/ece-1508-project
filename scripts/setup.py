@@ -24,6 +24,15 @@ REQUIRED_SUBDIRS = ["train/day", "train/night", "test/day", "test/night"]
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+
+    Available arguments:
+        --skip-install: Skip dependency installation.
+        --skip-prepare: Skip raw-dataset validation and few-shot split preparation.
+        --shots: List of shot sizes for few-shot splits.
+        --seeds: List of random seeds for few-shot splits.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--skip-install",

@@ -1,32 +1,24 @@
 # ece-1508-project
-## Few-Shot Day-to-Night Translation: Cycle Alignment vs. Example Imitation
 
-This is the main README for the project.
+Few-shot day-to-night image translation on the DarkDriving dataset. This
+project compares CycleGAN-Turbo and SD-Turbo+LoRA under 10-, 20-, and
+50-shot settings to study how unpaired cycle-consistent learning and paired
+supervision behave under limited data.
 
-## Overview
+## Project Layout
 
-This project investigates few-shot day-to-night image translation by comparing two state-of-the-art single-step conditional models built on the same backbone: CycleGAN-Turbo and SD-Turbo+LoRA. Both models originate from the img2img-turbo framework (Parmar et al., 2024) and share an identical generator architecture—integrating SD-Turbo with LoRA adapters, skip connections, and Zero-Convs into a unified end-to-end network. The key difference lies in their learning paradigm：
-CycleGAN-Turbo adopts a cycle-consistency objective with unpaired data，learning the underlying "day ↔ night" mapping by ensuring that a translated night image can be translated back to the original day image. This approach focuses on domain‑level alignment and has been shown to outperform existing GAN‑based and diffusion‑based methods for various scene translation tasks, including day‑to‑night conversion.
-SD-Turbo+LoRA (in its paired variant, pix2pix-turbo) follows a direct imitation paradigm, training on explicit (day, night) pairs to replicate the example transformation. The same generator architecture is shared, differing only in the learning objective and data format.
-We ask: Under extreme data scarcity (10, 20, and 50 training pairs), which learning paradigm—cycle alignment or example imitation—enables a model to more effectively learn the day-to-night mapping? Where is the breaking point at which generation quality begins to degrade?
+- `configs/`: YAML configuration files used by the scripts
+- `data/`: raw and processed dataset splits
+- `docs/`: experiment notes and supporting documentation
+- `external/`: vendored `img2img-turbo` source
+- `notebooks/`: analysis of the experiment, including EDA and smoke-test notebooks
+- `outputs/`: training checkpoints and related artifacts
+- `results/`: generated samples and evaluation outputs
+- `scripts/`: top-level experiment and utility entrypoints
+- `src/`: training and evaluation code
 
-
-## Project Structure
-
-- `data/`: Dataset directory (raw, processed, and splits)
-- `notebooks/`: Jupyter notebooks for EDA and visualization
-- `src/`: Source code for models, training, and evaluation
-- `configs/`: Configuration files for different models
-- `scripts/`: Utility scripts for data preparation and experiment execution
-- `results/`: Results and figures from experiments
-- `docs/`: Documentation
-
-## Data Download
-
+## Setup
 ### DarkDriving Dataset (ICRA 2026)
-
-The dataset is not automatically downloaded due to license and file size.
-
 **Manual Download Steps:**
 1. Go to the official repository: https://github.com/DriveMindLab/DarkDriving-ICRA-2026
 2. Download **DarkDriving_lle** from the [OneDrive link](https://onedrive.live.com/?id=64492CF1FC56CDDE%21s07d39562e06943cbb357c24a9708a0cb&cid=64492CF1FC56CDDE&redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvYy82NDQ5MmNmMWZjNTZjZGRlL0lnQmlsZE1IYWVETFE3Tlh3a3FYQ0tETEFiVnJrN3N5RjBsaElJdTNQU1ZKVVBVP2U9c01KUDJU) provided in the README
@@ -42,35 +34,23 @@ Run below code to download the processed data
 bash scripts/download_dark_driving.sh
 ```
 
-## Setup
-
-Python 3.10 and CUDA 11.8 are the reproducible baseline. Conda is recommended:
+The project is set up for Python 3.10 and CUDA 11.8.
 
 ```bash
 conda env create -f environment.yaml
 conda activate ece-1508
-python scripts/setup.py --skip-install
+python scripts/setup.py
 ```
 
-The setup script clones the official `img2img-turbo` repository, pins it to
-commit `86f54146590ffb4543c8cf85b5a36657da670924`, installs the required
-compatibility patches, and prepares the few-shot training views. The Conda
-environment already installs `requirements.txt`, so `--skip-install` avoids a
-duplicate pip install. To prepare only selected views, pass `--shots` and
-`--seeds`.
-
-When a preprocessed subset was uploaded instead of the full raw dataset, set up
-only the pinned and patched vendor tree:
+The setup script prepares the vendored `img2img-turbo` code and the processed
+few-shot splits. If you already have the processed data and only want to patch
+the vendored training tree, use:
 
 ```bash
 python scripts/setup.py --skip-install --skip-prepare
 ```
 
-Both setup modes idempotently apply the FP16 safety fix, the upstream
-training-loop fix that makes `max_train_steps` stop exactly, and optimizer
-parameter de-duplication. Training is launched through the active Python
-interpreter, so a copied environment cannot silently reuse another environment's
-`accelerate` console script.
+## Data
 
 **Output Structure:**
 ```
@@ -111,83 +91,87 @@ data/
 ...
 ```
 
-## Running Experiments
+## Full Experiment Pipeline
 
-This script launches the implemented pix2pix training runs using 10, 20, and 50
-shots with seeds 1, 2, and 3. CycleGAN is intentionally excluded until
-`src/train/model_unpaired.py` is implemented. Formal held-out evaluation is a
-separate post-training step. To override the defaults, specify `--shots` and
-`--seeds`.
-```bash
-python scripts/run_experiments.py
-```
+The main orchestration entrypoint is `scripts/run_experiment.py`.
+It iterates over every requested model, shot count, and seed, then runs:
 
-`configs/base.yaml` controls the upstream pix2pix command, including batch size,
-workers, learning rate, training/checkpoint steps, precision, xformers, gradient
-checkpointing, LoRA ranks, loss weights, image preparation, validation FID, and
-W&B logging. When `logging.use_wandb` is false, the launcher sets
-`WANDB_MODE=disabled` while retaining the upstream-supported `wandb` reporter.
+1. training
+2. sample generation
+3. evaluation
+4. optional cross-run summarization
 
-For a cheap first VPS smoke test, use the dedicated config and one run:
+By default it runs both `pix2pix` and `cyclegan` for `10`, `20`, and `50`
+shots with seeds `1`, `2`, and `3`.
 
 ```bash
-python scripts/run_experiments.py \
-  --config configs/smoke.yaml \
-  --shots 10 \
-  --seeds 1
+python scripts/run_experiment.py
 ```
 
-The run must stop at exactly two steps and write
-`outputs/smoke/pix2pix_turbo/train/10shot/seed1/checkpoints/model_2.pkl`.
+Useful flags:
 
-The launcher refuses to start when that run directory already contains checkpoints,
-because automatic resume is not supported. Move or remove an earlier smoke run before
-rerunning it; this also prevents evaluation from selecting a stale checkpoint.
+- `--models pix2pix cyclegan`: choose which pipelines to run
+- `--shots 10 20 50`: choose the shot counts to iterate over
+- `--seeds 1 2 3`: choose the random seeds to iterate over
+- `--skip-training`: skip the training stage
+- `--skip-generation`: skip sample generation
+- `--skip-evaluation`: skip evaluation
+- `--generate-summary`: write the aggregated summary after evaluation
+- `--test-samples N`: limit the number of test pairs used for generation and evaluation
+- `--prompt "..."`: override the generation prompt
+- `--metrics ssim lpips clip_similarity cmmd`: override the evaluation metrics
+- `--use-fp16`: enable fp16 during generation when supported
 
-## Evaluation
+## Training Only
 
-Formal evaluation is a post-training step over the held-out paired test set in
-`data/processed/test/{test_A,test_B}`, where `test_A` contains day inputs and
-`test_B` contains filename-aligned night targets. It does not use upstream
-training-time validation folders as final results.
+The training scripts live under `src/train/` and are invoked by the orchestrator.
+The paired pipeline is handled by `src/train/model_paired.py`, and the unpaired
+pipeline is handled by `src/train/model_unpaired.py`.
 
-Run all formal evaluations after the training checkpoints exist:
+The default training output root is controlled by `configs/base.yaml`:
 
-```bash
-bash scripts/run_all_evaluations.sh
+- `pix2pix_turbo.output_dir`: paired training checkpoints
+- `cyclegan_turbo.output_dir`: unpaired training checkpoints
+
+## Generation And Evaluation
+
+The generation script is `scripts/generate_samples.py` and the evaluation script
+is `scripts/evaluate_samples.py`. Both loop over the requested models, shots,
+and seeds, and write their outputs into the `results/` tree.
+
+Generation output is written under:
+
+```text
+results/generated/<model>/<shot>shot/seed<seed>/
 ```
 
-The wrapper evaluates pix2pix by default. Once CycleGAN training is implemented,
-run both with `MODELS="pix2pix cyclegan" bash scripts/run_all_evaluations.sh`.
+Evaluation output is written under:
 
-The runner computes per-sample SSIM, LPIPS, and CLIP Vision cosine similarity,
-then computes run-level CMMD from CLIP image embeddings. Outputs are written
-under `results/evaluation/<model>/<shot>shot/seed<seed>/`:
-
-- `generated/`: generated night images aligned by filename
-- `per_sample_metrics.csv`: per-pair SSIM, LPIPS, and CLIP similarity
-- `summary.json`: aggregate means/stds plus CMMD
-- `manifest.json`: checkpoint, split, metric, and filename metadata
-
-To evaluate an existing generated-image directory without running model
-inference:
-
-```bash
-python src/eval/run_evaluation.py \
-  --model pix2pix \
-  --shot 10 \
-  --seed 1 \
-  --generated-dir results/evaluation/pix2pix/10shot/seed1/generated
+```text
+results/evaluation/<model>/<shot>shot/seed<seed>/
 ```
 
-The summarizer treats each seed as one independent run and writes per-run and
-cross-seed tables:
+Evaluation computes the metrics defined in `configs/base.yaml` by default:
 
-```bash
-python src/eval/summarize_evaluations.py
-```
+- SSIM
+- LPIPS
+- CLIP image similarity
+- CMMD
 
-Outputs are `results/evaluation/runs.csv`, `aggregate.csv`, and `aggregate.json`.
-Higher is better for SSIM and CLIP similarity; lower is better for LPIPS and
-CMMD. With only three seeds, the project reports descriptive mean and standard
-deviation rather than an overstated significance-based breaking point.
+## Summarization
+
+When enabled, the evaluation workflow also writes aggregate summaries across
+seeds. The summarization output lives under `results/evaluation/` and includes
+CSV and JSON tables for per-run and cross-seed reporting.
+
+## Configuration
+
+The default configuration is `configs/base.yaml`. It controls:
+
+- dataset roots and image size
+- training batch size, learning rate, checkpoint cadence, and precision
+- model-specific LoRA and loss weights
+- evaluation metrics and output paths
+- logging behavior
+
+`configs/smoke.yaml` can be used for a quick test run with a smaller setup.

@@ -40,6 +40,7 @@ pix2pix_turbo:
 # Training - CycleGAN-Turbo (unpaired)
 cyclegan_turbo:
   output_dir: "outputs/cyclegan_turbo/train"
+  tracker_project_name: "cyclegan_turbo_darkdriving"
   lora_rank_unet: 4
   lora_rank_vae: 4
   lambda_cycle: 1.0

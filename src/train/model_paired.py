@@ -12,6 +12,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "base.yaml"
+# Check that the vendored training script has been patched for compatibility with our training loop.
 REQUIRED_VENDOR_MARKERS = (
     "max_train_steps is the authoritative stopping condition",
     "Keep trainable parameters in FP32",
@@ -20,6 +21,14 @@ REQUIRED_VENDOR_MARKERS = (
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+
+    Available arguments:
+        --shots: List of shot counts for few-shot training.
+        --seeds: List of random seeds for few-shot training.
+        --config: Path to the YAML configuration file.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--shots",
@@ -119,7 +128,7 @@ def build_train_command(
         command.append("--track_val_fid")
     return command
 
-
+# We want disable external logging (e.g., WandB) as we want faster, cleaner and offline training runs.
 def training_environment(config: dict) -> dict[str, str]:
     environment = os.environ.copy()
     if not config["logging"]["use_wandb"]:

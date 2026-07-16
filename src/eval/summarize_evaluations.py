@@ -80,6 +80,14 @@ def aggregate_runs(runs: list[dict]) -> list[dict]:
     return rows
 
 
+def _write_csv(output_path: Path, fieldnames: list[str], rows: list[dict]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def write_run_csv(runs: list[dict], output_path: Path) -> None:
     metric_names = sorted({metric for run in runs for metric in run["metrics"]})
     fieldnames = ["model", "shot", "seed", "num_samples", *metric_names]
@@ -125,36 +133,50 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    config = OmegaConf.load(args.config.resolve())
+def summarize(
+    config: Path = DEFAULT_CONFIG,
+    evaluation_root: Path | None = None,
+    runs_csv: Path | None = None,
+    aggregate_csv: Path | None = None,
+    aggregate_json: Path | None = None,
+):
+    loaded_config = OmegaConf.load(config.resolve())
+
     evaluation_root = (
-        args.evaluation_root
+        evaluation_root
         or PROJECT_ROOT
-        / str(OmegaConf.select(config, "eval.output_dir", default="results/evaluation"))
+        / str(
+            OmegaConf.select(
+                loaded_config, "eval.output_dir", default="results/evaluation"
+            )
+        )
     ).resolve()
+
     runs = load_runs(evaluation_root)
     aggregate = aggregate_runs(runs)
 
-    runs_csv = (args.runs_csv or evaluation_root / "runs.csv").resolve()
-    aggregate_csv = (args.aggregate_csv or evaluation_root / "aggregate.csv").resolve()
-    aggregate_json = (
-        args.aggregate_json or evaluation_root / "aggregate.json"
-    ).resolve()
+    runs_csv = (runs_csv or evaluation_root / "runs.csv").resolve()
+    aggregate_csv = (aggregate_csv or evaluation_root / "aggregate.csv").resolve()
+    aggregate_json = (aggregate_json or evaluation_root / "aggregate.json").resolve()
+
     write_run_csv(runs, runs_csv)
     write_aggregate_outputs(aggregate, aggregate_csv, aggregate_json)
+
     print(f"Wrote {runs_csv}")
     print(f"Wrote {aggregate_csv}")
     print(f"Wrote {aggregate_json}")
-    return 0
 
 
-def _write_csv(output_path: Path, fieldnames: list[str], rows: list[dict]) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+def main():
+    args = parse_args()
+
+    summarize(
+        config=args.config,
+        evaluation_root=args.evaluation_root,
+        runs_csv=args.runs_csv,
+        aggregate_csv=args.aggregate_csv,
+        aggregate_json=args.aggregate_json,
+    )
 
 
 if __name__ == "__main__":

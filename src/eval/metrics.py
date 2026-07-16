@@ -11,7 +11,6 @@ from torchvision import transforms
 - CMMD: CLIP-feature distributional similarity
 """
 
-
 class MetricsCalculator:
     def __init__(
         self,
@@ -91,6 +90,7 @@ class MetricsCalculator:
             first_np = first.cpu().numpy().transpose(1, 2, 0)
             second_np = second.cpu().numpy().transpose(1, 2, 0)
             min_side = min(first_np.shape[:2])
+            # Odd window size is required for SSIM, so we take the largest odd number <= min_side, but at least 3
             win_size = min(11, min_side if min_side % 2 else min_side - 1)
             if win_size < 3:
                 raise ValueError("SSIM requires images at least 3x3 pixels")
