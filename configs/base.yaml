@@ -44,10 +44,12 @@ cyclegan_turbo:
   # Runtime values not listed here inherit from training; keep only overrides.
   batch_size: 1
   num_workers: 0
+  learning_rate: 1.0e-5
   checkpointing_steps: 2000
-  mixed_precision: "fp16"
+  preview_steps: 1000
+  mixed_precision: "bf16"
   gradient_checkpointing: true
-  lora_rank_unet: 4
+  lora_rank_unet: 128
   lora_rank_vae: 4
   lambda_cycle: 1.0
   lambda_cycle_lpips: 10.0
@@ -60,6 +62,24 @@ cyclegan_turbo:
   validation_num_images: 1
   skip_training_validation: true
   allow_tf32: false
+
+# Controlled CycleGAN-Turbo U-Net LoRA-rank ablation
+lora_rank_experiment:
+  output_dir: "outputs/lora_rank_experiment"
+  shots: 50
+  seed: 1
+  steps: 1000
+  resolution: 256
+  precision: "bf16"
+  unet_ranks: [16, 32, 64, 128]
+  vae_rank: 4
+  learning_rate: 1.0e-5
+  batch_size: 1
+  num_workers: 0
+  checkpointing_steps: 1000
+  preview_steps: 1000
+  enable_xformers: true
+  gradient_checkpointing: true
 
 # Evaluation
 eval:

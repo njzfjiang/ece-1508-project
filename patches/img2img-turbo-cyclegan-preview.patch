@@ -1,0 +1,159 @@
+--- a/src/my_utils/training_utils.py
++++ b/src/my_utils/training_utils.py
+@@ -152,6 +152,12 @@
+         help="Skip FID/DINO initialization and validation during training; use an external evaluator instead.",
+     )
+     parser.add_argument("--checkpointing_steps", type=int, default=500)
++    parser.add_argument(
++        "--preview_steps",
++        type=int,
++        default=100,
++        help="Save a fixed held-out A-to-B preview every N steps; 0 disables.",
++    )
+
+     # args for the optimization options
+     parser.add_argument("--learning_rate", type=float, default=5e-6,)
+--- a/src/train_cyclegan_turbo.py
++++ b/src/train_cyclegan_turbo.py
+@@ -23,15 +23,69 @@
+ from my_utils.dino_struct import DinoStructureLoss
+
+
++def save_a2b_preview(
++    input_path,
++    output_dir,
++    step,
++    transform,
++    vae_enc,
++    unet,
++    vae_dec,
++    scheduler,
++    text_embedding,
++    device,
++    weight_dtype,
++):
++    """Generate a comparable held-out A-to-B image without updating weights."""
++    preview_dir = os.path.join(output_dir, "previews")
++    os.makedirs(preview_dir, exist_ok=True)
++    input_image = transform(Image.open(input_path).convert("RGB"))
++    input_image.save(os.path.join(preview_dir, "input_A.png"))
++    image_tensor = transforms.ToTensor()(input_image)
++    image_tensor = transforms.Normalize([0.5], [0.5])(image_tensor).unsqueeze(0)
++    image_tensor = image_tensor.to(device=device, dtype=weight_dtype)
++    timesteps = torch.tensor(
++        [scheduler.config.num_train_timesteps - 1],
++        device=device,
++    ).long()
++
++    modules = (vae_enc, unet, vae_dec)
++    training_modes = [module.training for module in modules]
++    for module in modules:
++        module.eval()
++    with torch.no_grad():
++        generated = CycleGAN_Turbo.forward_with_networks(
++            image_tensor,
++            "a2b",
++            vae_enc,
++            unet,
++            vae_dec,
++            scheduler,
++            timesteps,
++            text_embedding[0:1].to(dtype=weight_dtype),
++        )
++    preview = transforms.ToPILImage()(
++        generated[0].float().cpu() * 0.5 + 0.5
++    )
++    preview.save(
++        os.path.join(preview_dir, f"a2b_step_{step:08d}.png")
++    )
++    for module, was_training in zip(modules, training_modes):
++        module.train(was_training)
++
++
+ def main(args):
+     accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, log_with=args.report_to)
+     set_seed(args.seed)
+
+     if args.max_train_steps is None:
+         raise ValueError("CycleGAN-Turbo training requires --max_train_steps")
++    if args.preview_steps < 0:
++        raise ValueError("--preview_steps cannot be negative")
+
+     if accelerator.is_main_process:
+         os.makedirs(os.path.join(args.output_dir, "checkpoints"), exist_ok=True)
++        os.makedirs(os.path.join(args.output_dir, "previews"), exist_ok=True)
+
+     tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer", revision=args.revision, use_fast=False,)
+     noise_scheduler_1step = make_1step_sched()
+@@ -89,6 +143,8 @@
+     for ext in ["*.jpg", "*.jpeg", "*.png", "*.bmp"]:
+         l_images_tgt_test.extend(glob(os.path.join(args.dataset_folder, "test_B", ext)))
+     l_images_src_test, l_images_tgt_test = sorted(l_images_src_test), sorted(l_images_tgt_test)
++    if args.preview_steps and not l_images_src_test:
++        raise ValueError("A-to-B previews require at least one image in test_A")
+
+     # make the reference FID statistics
+     # Skip training-time FID initialization when formal evaluation is external.
+@@ -155,6 +211,8 @@
+     if accelerator.is_main_process:
+         accelerator.init_trackers(args.tracker_project_name, config=dict(vars(args)))
+
++    first_epoch = 0
++    global_step = 0
+     loss_csv_handle = None
+     loss_csv_writer = None
+     if accelerator.is_main_process:
+@@ -165,9 +223,23 @@
+         )
+         loss_csv_writer.writeheader()
+         loss_csv_handle.flush()
++        if global_step == 0 and args.preview_steps:
++            save_a2b_preview(
++                l_images_src_test[0],
++                args.output_dir,
++                0,
++                T_val,
++                accelerator.unwrap_model(vae_enc),
++                accelerator.unwrap_model(unet),
++                accelerator.unwrap_model(vae_dec),
++                noise_scheduler_1step,
++                fixed_a2b_emb_base,
++                accelerator.device,
++                weight_dtype,
++            )
++            gc.collect()
++            torch.cuda.empty_cache()
+
+-    first_epoch = 0
+-    global_step = 0
+     progress_bar = tqdm(total=args.max_train_steps, initial=global_step, desc="Steps",
+         disable=not accelerator.is_local_main_process,)
+     # turn off eff. attn for the disc
+@@ -321,6 +393,27 @@
+                                 gc.collect()
+                                 torch.cuda.empty_cache()
+
++                    preview_due = args.preview_steps and (
++                        global_step % args.preview_steps == 0
++                        or global_step >= args.max_train_steps
++                    )
++                    if preview_due:
++                        save_a2b_preview(
++                            l_images_src_test[0],
++                            args.output_dir,
++                            global_step,
++                            T_val,
++                            eval_vae_enc,
++                            eval_unet,
++                            eval_vae_dec,
++                            noise_scheduler_1step,
++                            fixed_a2b_emb_base,
++                            accelerator.device,
++                            weight_dtype,
++                        )
++                        gc.collect()
++                        torch.cuda.empty_cache()
++
+                     if global_step % args.checkpointing_steps == 0 or global_step >= args.max_train_steps:
+                         outf = os.path.join(args.output_dir, "checkpoints", f"model_{global_step}.pkl")
+                         sd = {}

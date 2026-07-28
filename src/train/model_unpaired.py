@@ -16,13 +16,15 @@ TRAIN_SCRIPT = (
     PROJECT_ROOT / "external" / "img2img-turbo" / "src" / "train_cyclegan_turbo.py"
 )
 MODEL_SCRIPT = PROJECT_ROOT / "external" / "img2img-turbo" / "src" / "cyclegan_turbo.py"
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}
 
-REQUIRED_TRAIN_MARKERS = (
+REQUIRED_TRAINER_MARKERS = (
     "max_train_steps is the authoritative stopping condition for CycleGAN-Turbo",
     "Skip training-time FID initialization when formal evaluation is external",
     "Backward each direction before constructing the next graph",
     'sd["sd_unet_conv_in"] = base_conv_in.state_dict()',
     'os.path.join(args.output_dir, "losses.csv")',
+    "if global_step == 0 and args.preview_steps:",
 )
 REQUIRED_MODEL_MARKERS = (
     "Keep pretrained VAE weights frozen",
@@ -103,6 +105,8 @@ def build_train_command(
         str(steps),
         "--checkpointing_steps",
         str(runtime_value(config, "checkpointing_steps")),
+        "--preview_steps",
+        str(cyclegan.get("preview_steps", 500)),
         "--gradient_accumulation_steps",
         str(runtime_value(config, "gradient_accumulation_steps", 1)),
         "--learning_rate",
@@ -157,10 +161,47 @@ def training_environment(config: dict, gpu: int) -> dict[str, str]:
     return environment
 
 
-def validate_vendor() -> None:
+def image_files(directory: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+
+def validate_dataset(dataset: Path, expected_shots: int) -> None:
+    """Validate the unpaired few-shot folder contract before using the GPU."""
+    for prompt_name in ("fixed_prompt_a.txt", "fixed_prompt_b.txt"):
+        prompt_path = dataset / prompt_name
+        if not prompt_path.is_file():
+            raise FileNotFoundError(f"Missing domain prompt: {prompt_path}")
+        if not prompt_path.read_text(encoding="utf-8").strip():
+            raise ValueError(f"Domain prompt is empty: {prompt_path}")
+
+    counts: dict[str, int] = {}
+    for folder_name in ("train_A", "train_B", "test_A", "test_B"):
+        folder = dataset / folder_name
+        if not folder.is_dir():
+            raise FileNotFoundError(f"Missing image folder: {folder}")
+        counts[folder_name] = len(image_files(folder))
+
+    if (
+        counts["train_A"] != expected_shots
+        or counts["train_B"] != expected_shots
+    ):
+        raise ValueError(
+            f"Expected {expected_shots} images in each training domain; "
+            f"found train_A={counts['train_A']} and train_B={counts['train_B']}"
+        )
+    if counts["test_A"] == 0 or counts["test_B"] == 0:
+        raise ValueError("test_A and test_B must contain validation images")
+
+
+def validate_vendor_script(trainer: Path) -> None:
+    model = trainer.with_name("cyclegan_turbo.py")
     for path, markers in (
-        (TRAIN_SCRIPT, REQUIRED_TRAIN_MARKERS),
-        (MODEL_SCRIPT, REQUIRED_MODEL_MARKERS),
+        (trainer, REQUIRED_TRAINER_MARKERS),
+        (model, REQUIRED_MODEL_MARKERS),
     ):
         if not path.is_file():
             raise FileNotFoundError(f"Vendored CycleGAN file not found: {path}")
@@ -174,6 +215,10 @@ def validate_vendor() -> None:
             )
 
 
+def validate_vendor() -> None:
+    validate_vendor_script(TRAIN_SCRIPT)
+
+
 def _project_path(path: str | Path) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
@@ -182,8 +227,15 @@ def _project_path(path: str | Path) -> Path:
 def main() -> int:
     args = parse_args()
     config = load_config(args.config.resolve())
+    if any(shot <= 0 for shot in args.shots):
+        raise ValueError("shots must be positive")
+    if any(seed <= 0 for seed in args.seeds):
+        raise ValueError("seeds must be positive")
     if args.steps is not None and args.steps <= 0:
         raise ValueError("max_train_steps must be positive")
+    preview_steps = int(config["cyclegan_turbo"].get("preview_steps", 100))
+    if preview_steps < 0:
+        raise ValueError("cyclegan_turbo.preview_steps cannot be negative")
 
     dataset_root = _project_path(config["data"]["root"])
     output_root = (
@@ -202,8 +254,8 @@ def main() -> int:
     for shot in args.shots:
         for seed in args.seeds:
             dataset_dir = dataset_root / f"{shot}shot" / f"seed{seed}"
-            if not dataset_dir.is_dir() and not args.dry_run:
-                raise FileNotFoundError(f"Missing dataset: {dataset_dir}")
+            if not args.dry_run:
+                validate_dataset(dataset_dir, expected_shots=shot)
             output_dir = output_root / f"{shot}shot" / f"seed{seed}"
             existing = list((output_dir / "checkpoints").glob("model_*.pkl"))
             if existing:

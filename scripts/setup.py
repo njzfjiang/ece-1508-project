@@ -23,6 +23,7 @@ PATCHES = [
     PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-sequential-backward.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-conv-in-checkpoint.patch",
     PROJECT_ROOT / "patches" / "img2img-turbo-training-loss-csv.patch",
+    PROJECT_ROOT / "patches" / "img2img-turbo-cyclegan-preview.patch",
 ]
 REQUIRED_SUBDIRS = ["train/day", "train/night", "test/day", "test/night"]
 
@@ -93,7 +94,20 @@ def setup_repo() -> None:
     if not EXTERNAL_DIR.exists():
         run(["git", "clone", UPSTREAM_URL, str(EXTERNAL_DIR)])
     run(["git", "-C", str(EXTERNAL_DIR), "fetch"])
-    run(["git", "-C", str(EXTERNAL_DIR), "checkout", UPSTREAM_COMMIT])
+    # The nested repository is generated from a pinned upstream snapshot.
+    # Discard previously applied tracked-file changes so newer project patches
+    # never land on a partially patched vendor tree. Untracked files remain.
+    run(
+        [
+            "git",
+            "-C",
+            str(EXTERNAL_DIR),
+            "checkout",
+            "--detach",
+            "--force",
+            UPSTREAM_COMMIT,
+        ]
+    )
     for patch_path in PATCHES:
         apply_patch(patch_path)
 
