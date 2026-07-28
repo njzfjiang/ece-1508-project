@@ -40,10 +40,10 @@ cyclegan_turbo:
   output_dir: "outputs/smoke/cyclegan_turbo/train"
   tracker_project_name: "cyclegan_turbo_darkdriving"
   resolution: 256
-  learning_rate: 1.0e-5
+  preview_steps: 0
   mixed_precision: "fp16"
   gradient_checkpointing: true
-  lora_rank_unet: 128
+  lora_rank_unet: 4
   lora_rank_vae: 4
   lambda_cycle: 1.0
   lambda_cycle_lpips: 10.0
@@ -57,22 +57,25 @@ cyclegan_turbo:
   skip_training_validation: true
   allow_tf32: false
 
-# Lightweight validation of the LoRA-rank sweep orchestration
+# Validate the formal 512-pixel rank pilot's memory path before a long run.
 lora_rank_experiment:
   output_dir: "outputs/smoke/lora_rank_experiment"
   shots: 10
   seed: 1
-  steps: 5
-  resolution: 256
-  precision: "bf16"
-  unet_ranks: [16, 32]
+  steps: 2
+  resolution: 512
+  precision: "fp16"
+  unet_ranks: [4, 128]
   vae_rank: 4
-  learning_rate: 1.0e-5
+  learning_rate: 5.0e-6
   batch_size: 1
   num_workers: 0
-  checkpointing_steps: 5
-  preview_steps: 5
-  enable_xformers: false
+  checkpointing_steps: 2
+  preview_steps: 2
+  validation_samples: 1
+  metrics: ["ssim"]
+  cmmd_sigma: 1.0
+  enable_xformers: true
   gradient_checkpointing: true
 
 # Evaluation

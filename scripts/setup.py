@@ -94,9 +94,10 @@ def setup_repo() -> None:
     if not EXTERNAL_DIR.exists():
         run(["git", "clone", UPSTREAM_URL, str(EXTERNAL_DIR)])
     run(["git", "-C", str(EXTERNAL_DIR), "fetch"])
-    # The nested repository is generated from a pinned upstream snapshot.
-    # Discard previously applied tracked-file changes so newer project patches
-    # never land on a partially patched vendor tree. Untracked files remain.
+    # external/ is a generated tree: replay the project-owned patches from the
+    # pinned commit so edits to an existing patch can be deployed reliably.
+    # Any vendor change worth keeping must first be captured in patches/.
+    print("Resetting generated vendor tree to the pinned upstream commit...")
     run(
         [
             "git",

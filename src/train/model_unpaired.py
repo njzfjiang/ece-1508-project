@@ -106,7 +106,7 @@ def build_train_command(
         "--checkpointing_steps",
         str(runtime_value(config, "checkpointing_steps")),
         "--preview_steps",
-        str(cyclegan.get("preview_steps", 500)),
+        str(cyclegan.get("preview_steps", 0)),
         "--gradient_accumulation_steps",
         str(runtime_value(config, "gradient_accumulation_steps", 1)),
         "--learning_rate",
@@ -185,10 +185,7 @@ def validate_dataset(dataset: Path, expected_shots: int) -> None:
             raise FileNotFoundError(f"Missing image folder: {folder}")
         counts[folder_name] = len(image_files(folder))
 
-    if (
-        counts["train_A"] != expected_shots
-        or counts["train_B"] != expected_shots
-    ):
+    if counts["train_A"] != expected_shots or counts["train_B"] != expected_shots:
         raise ValueError(
             f"Expected {expected_shots} images in each training domain; "
             f"found train_A={counts['train_A']} and train_B={counts['train_B']}"
@@ -229,11 +226,11 @@ def main() -> int:
     config = load_config(args.config.resolve())
     if any(shot <= 0 for shot in args.shots):
         raise ValueError("shots must be positive")
-    if any(seed <= 0 for seed in args.seeds):
-        raise ValueError("seeds must be positive")
+    if any(seed < 0 for seed in args.seeds):
+        raise ValueError("seeds must be non-negative")
     if args.steps is not None and args.steps <= 0:
         raise ValueError("max_train_steps must be positive")
-    preview_steps = int(config["cyclegan_turbo"].get("preview_steps", 100))
+    preview_steps = int(config["cyclegan_turbo"].get("preview_steps", 0))
     if preview_steps < 0:
         raise ValueError("cyclegan_turbo.preview_steps cannot be negative")
 
@@ -282,7 +279,9 @@ def main() -> int:
             )
             expected = output_dir / "checkpoints" / f"model_{expected_steps}.pkl"
             if not expected.is_file():
-                raise RuntimeError(f"Training ended without final checkpoint: {expected}")
+                raise RuntimeError(
+                    f"Training ended without final checkpoint: {expected}"
+                )
 
     print(f"\nCycleGAN training completed. Checkpoints: {output_root}")
     return 0

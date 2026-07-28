@@ -54,6 +54,10 @@ data and only want to patch the vendored training tree, use:
 python scripts/setup.py --skip-install --skip-prepare
 ```
 
+`external/img2img-turbo` is a generated tree. Setup resets its tracked files
+to the pinned upstream commit before replaying `patches/`; capture any vendor
+change in a repository patch before rerunning setup.
+
 ## Data
 
 **Output Structure:**
