@@ -8,7 +8,7 @@ import torch
 from torchvision import transforms
 import torchvision.transforms.functional as TF
 import importlib
-from .utils import load_rgb, resize8
+from .utils import load_rgb
 
 
 EXT_SRC = Path(__file__).resolve().parents[2] / "external/img2img-turbo/src"
@@ -27,6 +27,11 @@ def _sample_seed(filename: str, base_seed: int) -> int:
     return (filename_seed + base_seed) % (2**63 - 1)
 
 
+def _image_to_tensor(image: Image.Image, transform: Callable) -> torch.Tensor:
+    """Apply the configured model preprocessing before tensor conversion."""
+    return TF.to_tensor(transform(image))
+
+
 def generate(
     model,
     checkpoint,
@@ -34,6 +39,7 @@ def generate(
     out,
     prompt,
     fp16=False,
+    pix2pix_image_prep="resize_512x512",
     cyclegan_image_prep="resize_512x512",
     seed=0,
 ):
@@ -43,6 +49,7 @@ def generate(
         sys.path.insert(0, str(EXT_SRC))
     out.mkdir(parents=True, exist_ok=True)
     transform: Optional[Callable] = None
+    build_transform = importlib.import_module("my_utils.training_utils").build_transform
 
     if model == "pix2pix":
         # ensure external src is available and import dynamically to avoid static import errors
@@ -54,6 +61,11 @@ def generate(
 
         net = Pix2Pix_Turbo(pretrained_path=str(checkpoint)).cuda()
         net.set_eval()
+        try:
+            net.unet.enable_xformers_memory_efficient_attention()
+        except Exception:
+            pass
+        transform = build_transform(pix2pix_image_prep)
 
     elif model == "cyclegan":
         try:
@@ -66,7 +78,6 @@ def generate(
             net.unet.enable_xformers_memory_efficient_attention()
         except Exception:
             pass
-        build_transform = importlib.import_module("my_utils.training_utils").build_transform
         transform = build_transform(cyclegan_image_prep)
     
     else:
@@ -83,17 +94,17 @@ def generate(
             torch.manual_seed(sample_seed)
             torch.cuda.manual_seed_all(sample_seed)
             img = load_rgb(src)
+            if transform is None:
+                raise RuntimeError("transform is not initialized")
 
             if model == "pix2pix":
-                x = TF.to_tensor(resize8(img)).unsqueeze(0).cuda()
+                x = _image_to_tensor(img, transform).unsqueeze(0).cuda()
                 if fp16:
                     x = x.half()
                 y = net(x, prompt)[0]
 
             else:
-                if transform is None:
-                    raise RuntimeError("transform is not initialized")
-                x = transforms.ToTensor()(transform(img))
+                x = _image_to_tensor(img, transform)
                 x = transforms.Normalize([0.5] * 3, [0.5] * 3)(x).unsqueeze(0).cuda()
                 if fp16:
                     x = x.half()

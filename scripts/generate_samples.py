@@ -100,7 +100,14 @@ def main() -> int:
             if args.checkpoint_root is not None
             else resolve_path(PROJECT_ROOT, str(configured_root))
         )
-        image_prep = str(
+        pix2pix_image_prep = str(
+            OmegaConf.select(
+                config,
+                "pix2pix_turbo.test_image_prep",
+                default="resize_512x512",
+            )
+        )
+        cyclegan_image_prep = str(
             OmegaConf.select(
                 config,
                 "cyclegan_turbo.val_image_prep",
@@ -133,7 +140,8 @@ def main() -> int:
                     out=output,
                     prompt=args.prompt,
                     fp16=args.use_fp16,
-                    cyclegan_image_prep=image_prep,
+                    pix2pix_image_prep=pix2pix_image_prep,
+                    cyclegan_image_prep=cyclegan_image_prep,
                     seed=args.generation_seed,
                 )
                 manifest = {
@@ -146,6 +154,11 @@ def main() -> int:
                     "test_samples": len(pairs),
                     "prompt": args.prompt,
                     "use_fp16": args.use_fp16,
+                    "image_prep": (
+                        pix2pix_image_prep
+                        if model == "pix2pix"
+                        else cyclegan_image_prep
+                    ),
                     "generation_seed": args.generation_seed,
                     "filenames": [day.name for day, _ in pairs],
                 }

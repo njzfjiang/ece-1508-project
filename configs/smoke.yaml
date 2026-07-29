@@ -32,7 +32,7 @@ pix2pix_turbo:
   lambda_clipsim: 5.0
   lambda_gan: 0.5
   train_image_prep: "resized_crop_512"
-  test_image_prep: "resized_crop_512"
+  test_image_prep: "resize_512x512"
   track_val_fid: false
 
 # Training - CycleGAN-Turbo (unpaired)

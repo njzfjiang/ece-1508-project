@@ -6,7 +6,7 @@ from PIL import Image
 import torch
 
 from src.eval.evaluate import evaluate_generated_pairs
-from src.eval.generate import _output_to_pil, _sample_seed
+from src.eval.generate import _image_to_tensor, _output_to_pil, _sample_seed
 from src.eval.utils import find_checkpoint, find_pairs, image_to_tensor
 
 
@@ -67,6 +67,13 @@ def test_sample_seed_is_stable_per_filename():
     assert _sample_seed("a.png", 0) == _sample_seed("a.png", 0)
     assert _sample_seed("a.png", 0) != _sample_seed("b.png", 0)
     assert _sample_seed("a.png", 0) != _sample_seed("a.png", 1)
+
+
+def test_image_to_tensor_applies_configured_preprocessing():
+    image = Image.new("RGB", (2448, 2048))
+    tensor = _image_to_tensor(image, lambda value: value.resize((512, 512)))
+
+    assert tuple(tensor.shape) == (3, 512, 512)
 
 
 def test_latest_checkpoint_is_selected_numerically(tmp_path):
