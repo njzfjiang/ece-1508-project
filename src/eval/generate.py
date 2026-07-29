@@ -12,6 +12,13 @@ from .utils import load_rgb, resize8
 
 EXT_SRC = Path(__file__).resolve().parents[2] / "external/img2img-turbo/src"
 
+
+def _output_to_pil(output: torch.Tensor) -> Image.Image:
+    """Convert a model output to RGB without running FP16 ops on CPU."""
+    normalized = (output.detach().float().cpu() * 0.5 + 0.5).clamp(0, 1)
+    return transforms.ToPILImage()(normalized)
+
+
 def generate(
     model,
     checkpoint,
@@ -78,5 +85,5 @@ def generate(
                     x = x.half()
                 y = net(x, direction="a2b", caption=prompt)[0]
 
-            y = transforms.ToPILImage()((y.cpu() * 0.5 + 0.5).clamp(0, 1))
+            y = _output_to_pil(y)
             y.resize(img.size, Image.Resampling.LANCZOS).save(out / src.name)
