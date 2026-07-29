@@ -1,3 +1,4 @@
+import hashlib
 import sys
 from pathlib import Path
 from typing import Callable, Optional
@@ -19,6 +20,13 @@ def _output_to_pil(output: torch.Tensor) -> Image.Image:
     return transforms.ToPILImage()(normalized)
 
 
+def _sample_seed(filename: str, base_seed: int) -> int:
+    """Return a stable per-image seed independent of Python's hash salt."""
+    digest = hashlib.sha256(filename.encode("utf-8")).digest()
+    filename_seed = int.from_bytes(digest[:8], byteorder="big", signed=False)
+    return (filename_seed + base_seed) % (2**63 - 1)
+
+
 def generate(
     model,
     checkpoint,
@@ -27,7 +35,10 @@ def generate(
     prompt,
     fp16=False,
     cyclegan_image_prep="resize_512x512",
+    seed=0,
 ):
+    if seed < 0:
+        raise ValueError("generation seed must be non-negative")
     if str(EXT_SRC) not in sys.path:
         sys.path.insert(0, str(EXT_SRC))
     out.mkdir(parents=True, exist_ok=True)
@@ -68,6 +79,9 @@ def generate(
 
     with torch.inference_mode():
         for src, _ in pairs:
+            sample_seed = _sample_seed(src.name, seed)
+            torch.manual_seed(sample_seed)
+            torch.cuda.manual_seed_all(sample_seed)
             img = load_rgb(src)
 
             if model == "pix2pix":

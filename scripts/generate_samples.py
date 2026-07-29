@@ -50,6 +50,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-samples", type=int)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--use-fp16", action="store_true")
+    parser.add_argument(
+        "--generation-seed",
+        type=int,
+        default=0,
+        help="Fixed base seed used for filename-stable latent sampling",
+    )
     return parser.parse_args()
 
 
@@ -59,6 +65,8 @@ def _single_run(args: argparse.Namespace) -> bool:
 
 def main() -> int:
     args = parse_args()
+    if args.generation_seed < 0:
+        raise ValueError("--generation-seed must be non-negative")
     config = OmegaConf.load(args.config.resolve())
     if (args.checkpoint is not None or args.output is not None) and not _single_run(args):
         raise ValueError("--checkpoint and --output require one model, shot, and seed")
@@ -126,6 +134,7 @@ def main() -> int:
                     prompt=args.prompt,
                     fp16=args.use_fp16,
                     cyclegan_image_prep=image_prep,
+                    seed=args.generation_seed,
                 )
                 manifest = {
                     "model": model,
@@ -137,6 +146,7 @@ def main() -> int:
                     "test_samples": len(pairs),
                     "prompt": args.prompt,
                     "use_fp16": args.use_fp16,
+                    "generation_seed": args.generation_seed,
                     "filenames": [day.name for day, _ in pairs],
                 }
                 (output / "generation_manifest.json").write_text(

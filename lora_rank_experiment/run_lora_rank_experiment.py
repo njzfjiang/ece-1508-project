@@ -283,6 +283,7 @@ def evaluate_rank(
         prompt=prompt,
         fp16=settings.precision == "fp16",
         cyclegan_image_prep=(f"resize_{settings.resolution}x{settings.resolution}"),
+        seed=0,
     )
     gc.collect()
     torch.cuda.empty_cache()
@@ -304,6 +305,7 @@ def evaluate_rank(
                 "unet_rank": unet_rank,
                 "checkpoint": str(checkpoint.resolve()),
                 "split": "validation",
+                "generation_seed": 0,
             },
             cmmd_sigma=settings.cmmd_sigma,
         )

@@ -94,3 +94,4 @@ wandb/
 runs/
 lightning_logs/
 external/
+tmp/

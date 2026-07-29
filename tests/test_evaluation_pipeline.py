@@ -6,7 +6,7 @@ from PIL import Image
 import torch
 
 from src.eval.evaluate import evaluate_generated_pairs
-from src.eval.generate import _output_to_pil
+from src.eval.generate import _output_to_pil, _sample_seed
 from src.eval.utils import find_checkpoint, find_pairs, image_to_tensor
 
 
@@ -61,6 +61,12 @@ def test_output_to_pil_converts_cpu_half_before_clamping():
 
     assert image.mode == "RGB"
     assert image.size == (8, 8)
+
+
+def test_sample_seed_is_stable_per_filename():
+    assert _sample_seed("a.png", 0) == _sample_seed("a.png", 0)
+    assert _sample_seed("a.png", 0) != _sample_seed("b.png", 0)
+    assert _sample_seed("a.png", 0) != _sample_seed("a.png", 1)
 
 
 def test_latest_checkpoint_is_selected_numerically(tmp_path):
