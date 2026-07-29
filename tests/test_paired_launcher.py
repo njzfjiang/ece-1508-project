@@ -29,7 +29,8 @@ def test_paired_command_uses_current_interpreter_and_safe_batch_size():
     assert _value_after(command, "--pretrained_model_name_or_path") == (
         "stabilityai/sd-turbo"
     )
-    assert _value_after(command, "--max_train_steps") == "4000"
+    assert _value_after(command, "--max_train_steps") == "2000"
+    assert _value_after(command, "--learning_rate") == "1e-05"
 
 
 def test_paired_environment_selects_one_physical_gpu():
