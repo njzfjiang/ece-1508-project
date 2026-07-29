@@ -37,4 +37,5 @@ def test_paired_environment_selects_one_physical_gpu():
     environment = training_environment(config, gpu=3)
 
     assert environment["CUDA_VISIBLE_DEVICES"] == "3"
+    assert environment["TOKENIZERS_PARALLELISM"] == "false"
     assert environment["WANDB_MODE"] == "disabled"

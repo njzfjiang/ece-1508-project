@@ -147,6 +147,9 @@ def build_train_command(
 def training_environment(config: dict, gpu: int) -> dict[str, str]:
     environment = os.environ.copy()
     environment["CUDA_VISIBLE_DEVICES"] = str(gpu)
+    # The tokenizer is initialized before DataLoader workers fork. Disable its
+    # internal Rayon pool while retaining process-level data loading workers.
+    environment["TOKENIZERS_PARALLELISM"] = "false"
     if not config["logging"]["use_wandb"]:
         environment["WANDB_MODE"] = "disabled"
     return environment
