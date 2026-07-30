@@ -1,0 +1,47 @@
+# RTX 5090 / Blackwell profile validated with CUDA 12.8.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+setuptools<81
+
+# CUDA 12.8 wheels with sm_120 support. Do not add xformers: the tested
+# xformers 0.0.35 installation did not provide a usable 5090 attention kernel.
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
+torchdata==0.11.0
+torchmetrics==1.9.0
+
+# Versions captured from the working 5090 environment.
+accelerate==1.13.0
+diffusers==0.39.0
+transformers==4.57.6
+huggingface-hub==0.36.0
+tokenizers==0.22.2
+peft==0.19.1
+open-clip-torch==3.3.0
+clip @ git+https://github.com/openai/CLIP.git@d05afc436d78f1c48dc0dbf8e5980a9d471f35f6
+lpips==0.1.4
+vision-aided-loss==0.1.0
+
+# Remaining project runtime and evaluation dependencies.
+safetensors>=0.4,<1
+einops>=0.6.1,<1
+timm>=1.0,<2
+numpy>=1.24.4,<2
+scipy==1.11.1
+Pillow>=9.5,<12
+opencv-python==4.6.0.66
+scikit-image>=0.20,<0.23
+clean-fid>=0.1.35
+PyYAML>=6.0,<7
+omegaconf>=2.3,<3
+tensorboard>=2.13,<3
+wandb>=0.15,<0.19
+tqdm>=4.65,<5
+matplotlib>=3.7,<3.9
+seaborn>=0.12,<0.14
+
+# Development and verification.
+black>=23.3,<25
+flake8>=6,<8
+pytest>=7.3,<9

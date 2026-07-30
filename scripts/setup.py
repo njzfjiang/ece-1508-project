@@ -45,6 +45,12 @@ def parse_args() -> argparse.Namespace:
         help="Skip dependency installation",
     )
     parser.add_argument(
+        "--requirements",
+        type=Path,
+        default=PROJECT_ROOT / "requirements.txt",
+        help="Requirements file to install (default: requirements.txt)",
+    )
+    parser.add_argument(
         "--skip-prepare",
         action="store_true",
         help="Skip raw-dataset validation and few-shot split preparation",
@@ -127,12 +133,12 @@ def apply_patch(patch_path: Path) -> None:
     print(f"Applied patch: {patch_path.name}")
 
 
-def install_deps(skip: bool = False) -> None:
+def install_deps(requirements: Path, skip: bool = False) -> None:
     print("\nInstalling dependencies...")
     if skip:
         print("Skipping dependency installation.")
         return
-    requirements = PROJECT_ROOT / "requirements.txt"
+    requirements = requirements.resolve()
     if not requirements.is_file():
         raise FileNotFoundError(f"Requirements not found: {requirements}")
     run([sys.executable, "-m", "pip", "install", "-r", str(requirements)])
@@ -174,7 +180,7 @@ def main() -> int:
     print("======================================")
 
     setup_repo()
-    install_deps(args.skip_install)
+    install_deps(args.requirements, args.skip_install)
     if args.skip_prepare:
         print("Skipping raw-dataset validation and split preparation.")
     else:

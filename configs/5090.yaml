@@ -1,9 +1,6 @@
-# Base configuration for experiments
+# Formal RTX 5090 profile. Keep experiment semantics aligned with base.yaml
+# while using Blackwell-compatible dependencies and isolated output roots.
 
-# configs/base.yaml
-# Base configuration for all experiments
-
-# Dataset
 data:
   root: "data/processed"
   image_size: 512
@@ -16,17 +13,16 @@ training:
   learning_rate: 1.0e-5
   max_train_steps: 2000
   checkpointing_steps: 2000
-  mixed_precision: "no"  # switch to fp16 only after applying the FP16 patch
-  enable_xformers: true
+  mixed_precision: "no"
+  enable_xformers: false
   gradient_checkpointing: false
   viz_freq: 25
   eval_freq: 100
   num_samples_eval: 100
 
-# Training - pix2pix-turbo (paired / SD-Turbo+LoRA)
 pix2pix_turbo:
-  output_dir: "outputs/pix2pix_turbo/train"
-  tracker_project_name: "pix2pix_turbo_darkdriving"
+  output_dir: "outputs/full_grid_5090/pix2pix_turbo/train"
+  tracker_project_name: "pix2pix_turbo_darkdriving_5090"
   lora_rank_unet: 8
   lora_rank_vae: 4
   lambda_l2: 1.0
@@ -37,11 +33,9 @@ pix2pix_turbo:
   test_image_prep: "resize_512x512"
   track_val_fid: false
 
-# Training - CycleGAN-Turbo (unpaired)
 cyclegan_turbo:
-  output_dir: "outputs/cyclegan_turbo/train"
-  tracker_project_name: "cyclegan_turbo_darkdriving"
-  # Runtime values not listed here inherit from training; keep only overrides.
+  output_dir: "outputs/full_grid_5090/cyclegan_turbo/train"
+  tracker_project_name: "cyclegan_turbo_darkdriving_5090"
   batch_size: 1
   num_workers: 0
   checkpointing_steps: 2000
@@ -62,9 +56,8 @@ cyclegan_turbo:
   skip_training_validation: true
   allow_tf32: false
 
-# Controlled CycleGAN-Turbo U-Net LoRA-rank pilot. Change only rank.
 lora_rank_experiment:
-  output_dir: "outputs/lora_rank_experiment"
+  output_dir: "outputs/5090/lora_rank_experiment"
   shots: 10
   seed: 1
   steps: 1000
@@ -80,26 +73,18 @@ lora_rank_experiment:
   validation_samples: 100
   metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
   cmmd_sigma: 1.0
-  enable_xformers: true
+  enable_xformers: false
   gradient_checkpointing: true
 
-# Evaluation
 eval:
   metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
   test_root: "data/processed/test"
-  generated_dir: "results/generated"
-  output_dir: "results/evaluation"
+  generated_dir: "results/full_grid_5090/generated"
+  output_dir: "results/full_grid_5090/evaluation"
   checkpoint_roots:
     pix2pix: "${pix2pix_turbo.output_dir}"
     cyclegan: "${cyclegan_turbo.output_dir}"
   clip_model: "ViT-B/32"
-  lpips_backbone: "alex"  # or "vgg"
+  lpips_backbone: "alex"
   test_samples: 200
   cmmd_sigma: 1.0
-
-# Logging
-logging:
-  use_wandb: false  # set to true if you have wandb account
-  log_dir: "results/logs"
-  checkpoint_dir: "results/checkpoints"
-  figure_dir: "results/figures"

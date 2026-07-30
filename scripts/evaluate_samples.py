@@ -81,7 +81,16 @@ def main() -> int:
     generated_root = (
         resolve_path(PROJECT_ROOT, args.generated_root)
         if args.generated_root is not None
-        else PROJECT_ROOT / "results" / "generated"
+        else resolve_path(
+            PROJECT_ROOT,
+            str(
+                OmegaConf.select(
+                    config,
+                    "eval.generated_dir",
+                    default="results/generated",
+                )
+            ),
+        )
     )
     output_root = (
         resolve_path(PROJECT_ROOT, args.output_root)

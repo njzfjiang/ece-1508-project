@@ -37,13 +37,37 @@ Run below code to download the processed data
 bash scripts/download_dark_driving.sh
 ```
 
-The project is set up for Python 3.10 and CUDA 11.8.
+The baseline environment uses Python 3.10 and CUDA 11.8 on Ampere GPUs.
 
 ```bash
 conda env create -f environment.yaml
 conda activate ece-1508
 python scripts/setup.py
 ```
+
+For RTX 5090 / Blackwell machines, use the separately pinned CUDA 12.8 profile.
+It intentionally disables xFormers and writes formal artifacts under isolated
+`outputs/full_grid_5090/` and `results/full_grid_5090/` roots:
+
+```bash
+conda env create -f environment-5090.yaml
+conda activate ece-1508-5090
+python scripts/setup.py --skip-install --skip-prepare
+
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
+```
+
+The expected PyTorch result is `2.10.0+cu128` on an RTX 5090. To install the
+5090 dependencies into an existing compatible environment instead, run:
+
+```bash
+python scripts/setup.py \
+  --requirements requirements-5090.txt \
+  --skip-prepare
+```
+
+Do not install `requirements.txt` into the 5090 environment: it pins PyTorch
+2.0.1/CUDA 11.8 and xFormers 0.0.20.
 
 The setup script prepares the vendored `img2img-turbo` code and the processed
 few-shot splits. It also applies the repository's replayable pix2pix and

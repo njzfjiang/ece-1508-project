@@ -85,6 +85,16 @@ def main() -> int:
     if test_samples is None:
         test_samples = int(OmegaConf.select(config, "eval.test_samples", default=200))
     pairs = find_pairs(test_root, limit=test_samples)
+    generated_root = resolve_path(
+        PROJECT_ROOT,
+        str(
+            OmegaConf.select(
+                config,
+                "eval.generated_dir",
+                default="results/generated",
+            )
+        ),
+    )
     if not torch.cuda.is_available():
         raise RuntimeError("Checkpoint generation requires CUDA")
     torch.cuda.set_device(args.gpu)
@@ -125,9 +135,7 @@ def main() -> int:
                 output = (
                     args.output.resolve()
                     if args.output is not None
-                    else PROJECT_ROOT
-                    / "results"
-                    / "generated"
+                    else generated_root
                     / model
                     / f"{shot}shot"
                     / f"seed{seed}"
