@@ -90,7 +90,7 @@ eval:
   cmmd_sigma: 1.0
 
 logging:
-  use_wandb: false
+  use_wandb: true
   log_dir: "results/full_grid_5090/logs"
   checkpoint_dir: "results/full_grid_5090/checkpoints"
   figure_dir: "results/full_grid_5090/figures"
