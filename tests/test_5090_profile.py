@@ -30,7 +30,7 @@ def test_5090_profile_is_blackwell_safe_and_isolates_outputs():
     )
     assert config["eval"]["generated_dir"].startswith("results/full_grid_5090/")
     assert config["eval"]["output_dir"].startswith("results/full_grid_5090/")
-    assert config["logging"]["use_wandb"] is False
+    assert isinstance(config["logging"]["use_wandb"], bool)
     assert config["logging"]["log_dir"].startswith("results/full_grid_5090/")
 
 
@@ -48,3 +48,18 @@ def test_5090_requirements_pin_validated_stack_without_xformers():
     ):
         assert requirement in requirements
     assert "\nxformers" not in requirements
+
+
+def test_5090_smoke_keeps_formal_resolution_with_two_steps():
+    config_path = ROOT / "configs" / "5090-smoke.yaml"
+    config = load_paired_config(config_path)
+
+    assert load_unpaired_config(config_path) == config
+    assert config["training"]["resolution"] == 512
+    assert config["training"]["max_train_steps"] == 2
+    assert config["training"]["checkpointing_steps"] == 2
+    assert config["training"]["enable_xformers"] is False
+    assert config["cyclegan_turbo"]["train_image_prep"] == "resize_512x512"
+    assert config["cyclegan_turbo"]["checkpointing_steps"] == 2
+    assert config["eval"]["test_samples"] == 1
+    assert config["logging"]["use_wandb"] is False

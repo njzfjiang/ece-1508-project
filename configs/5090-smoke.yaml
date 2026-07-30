@@ -1,0 +1,96 @@
+# RTX 5090 end-to-end smoke test. Unlike smoke.yaml, this keeps both model
+# paths at the formal 512px resolution while limiting training to two steps.
+
+data:
+  root: "data/processed"
+  image_size: 512
+
+training:
+  model: "stabilityai/sd-turbo"
+  resolution: 512
+  batch_size: 1
+  num_workers: 0
+  learning_rate: 1.0e-5
+  max_train_steps: 2
+  checkpointing_steps: 2
+  mixed_precision: "no"
+  enable_xformers: false
+  gradient_checkpointing: false
+  viz_freq: 25
+  eval_freq: 100
+  num_samples_eval: 1
+
+pix2pix_turbo:
+  output_dir: "outputs/smoke_5090/pix2pix_turbo/train"
+  tracker_project_name: "pix2pix_turbo_darkdriving_5090_smoke"
+  lora_rank_unet: 8
+  lora_rank_vae: 4
+  lambda_l2: 1.0
+  lambda_lpips: 5.0
+  lambda_clipsim: 5.0
+  lambda_gan: 0.5
+  train_image_prep: "resized_crop_512"
+  test_image_prep: "resize_512x512"
+  track_val_fid: false
+
+cyclegan_turbo:
+  output_dir: "outputs/smoke_5090/cyclegan_turbo/train"
+  tracker_project_name: "cyclegan_turbo_darkdriving_5090_smoke"
+  batch_size: 1
+  num_workers: 0
+  checkpointing_steps: 2
+  preview_steps: 0
+  mixed_precision: "fp16"
+  gradient_checkpointing: true
+  lora_rank_unet: 4
+  lora_rank_vae: 4
+  lambda_cycle: 1.0
+  lambda_cycle_lpips: 10.0
+  lambda_identity: 1.0
+  lambda_identity_lpips: 1.0
+  lambda_gan: 0.5
+  train_image_prep: "resize_512x512"
+  val_image_prep: "resize_512x512"
+  validation_steps: 500
+  validation_num_images: 1
+  skip_training_validation: true
+  allow_tf32: false
+
+lora_rank_experiment:
+  output_dir: "outputs/smoke_5090/lora_rank_experiment"
+  shots: 10
+  seed: 1
+  steps: 2
+  resolution: 512
+  precision: "fp16"
+  unet_ranks: [4, 32]
+  vae_rank: 4
+  learning_rate: 1.0e-5
+  batch_size: 1
+  num_workers: 0
+  checkpointing_steps: 2
+  preview_steps: 2
+  validation_samples: 1
+  metrics: ["ssim"]
+  cmmd_sigma: 1.0
+  enable_xformers: false
+  gradient_checkpointing: true
+
+eval:
+  metrics: ["ssim", "lpips", "clip_similarity", "cmmd"]
+  test_root: "data/processed/test"
+  generated_dir: "results/smoke_5090/generated"
+  output_dir: "results/smoke_5090/evaluation"
+  checkpoint_roots:
+    pix2pix: "${pix2pix_turbo.output_dir}"
+    cyclegan: "${cyclegan_turbo.output_dir}"
+  clip_model: "ViT-B/32"
+  lpips_backbone: "alex"
+  test_samples: 1
+  cmmd_sigma: 1.0
+
+logging:
+  use_wandb: false
+  log_dir: "results/smoke_5090/logs"
+  checkpoint_dir: "results/smoke_5090/checkpoints"
+  figure_dir: "results/smoke_5090/figures"

@@ -280,7 +280,25 @@ The default configuration is `configs/base.yaml`. It controls:
 - evaluation metrics and output paths
 - logging behavior
 
-`configs/smoke.yaml` can be used for a quick test run with a smaller setup.
+`configs/smoke.yaml` can be used for a quick test run with a smaller setup. On
+an RTX 5090, use the 512px end-to-end profile to exercise both formal model
+paths, checkpoint reload, generation, and evaluation without xFormers:
+
+```bash
+python scripts/run_experiment.py \
+  --models pix2pix cyclegan \
+  --shots 10 \
+  --seeds 1 \
+  --config configs/5090-smoke.yaml \
+  --gpus 0 1 \
+  --use-fp16 \
+  --test-samples 1 \
+  --metrics ssim lpips clip_similarity cmmd \
+  --generate-summary
+```
+
+This command requires two visible GPUs. On a single 5090, replace
+`--gpus 0 1` with `--gpus 0`; the two training tasks then run sequentially.
 
 ## Tests
 
