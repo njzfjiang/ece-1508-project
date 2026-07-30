@@ -42,7 +42,7 @@ cyclegan_turbo:
   preview_steps: 0
   mixed_precision: "fp16"
   gradient_checkpointing: true
-  lora_rank_unet: 4
+  lora_rank_unet: 32
   lora_rank_vae: 4
   lambda_cycle: 1.0
   lambda_cycle_lpips: 10.0
