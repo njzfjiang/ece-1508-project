@@ -2,12 +2,21 @@ from pathlib import Path
 
 import yaml
 
+from src.train.model_paired import load_config as load_paired_config
+from src.train.model_unpaired import load_config as load_unpaired_config
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_5090_profile_is_blackwell_safe_and_isolates_outputs():
-    config = yaml.safe_load((ROOT / "configs" / "5090.yaml").read_text())
+    config_path = ROOT / "configs" / "5090.yaml"
+    config = yaml.safe_load(config_path.read_text())
+
+    # Exercise both real launcher validators so required top-level sections
+    # cannot silently disappear when this profile is updated.
+    assert load_paired_config(config_path) == config
+    assert load_unpaired_config(config_path) == config
 
     assert config["training"]["enable_xformers"] is False
     assert config["lora_rank_experiment"]["enable_xformers"] is False
@@ -21,6 +30,8 @@ def test_5090_profile_is_blackwell_safe_and_isolates_outputs():
     )
     assert config["eval"]["generated_dir"].startswith("results/full_grid_5090/")
     assert config["eval"]["output_dir"].startswith("results/full_grid_5090/")
+    assert config["logging"]["use_wandb"] is False
+    assert config["logging"]["log_dir"].startswith("results/full_grid_5090/")
 
 
 def test_5090_requirements_pin_validated_stack_without_xformers():
