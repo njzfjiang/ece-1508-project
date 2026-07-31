@@ -26,6 +26,13 @@ def test_setup_preserves_memory_fixes_before_checkpoint_and_logging_patches():
     assert positions == sorted(positions)
 
 
+def test_setup_does_not_delete_corrupt_processed_images_after_preparation():
+    setup = (ROOT / "scripts" / "setup.py").read_text(encoding="utf-8")
+
+    assert "clean_dataset" not in setup
+    assert "Removing corrupted images from processed dataset" not in setup
+
+
 def test_loss_csv_patch_covers_both_trainers():
     patch = (ROOT / "patches" / "img2img-turbo-training-loss-csv.patch").read_text(
         encoding="utf-8"

@@ -71,7 +71,10 @@ Do not install `requirements.txt` into the 5090 environment: it pins PyTorch
 
 The setup script prepares the vendored `img2img-turbo` code and the processed
 few-shot splits. It also applies the repository's replayable pix2pix and
-CycleGAN compatibility and memory patches. If you already have the processed
+CycleGAN compatibility and memory patches. Dataset preparation fully decodes
+both sides of each raw pair and excludes corrupt pairs before deterministic
+few-shot sampling. Setup never deletes files from an existing processed split.
+If you already have the processed
 data and only want to patch the vendored training tree, use:
 
 ```bash

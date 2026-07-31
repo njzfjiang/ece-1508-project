@@ -10,6 +10,11 @@ from pathlib import Path
 
 import yaml
 
+if __package__:
+    from .data_validation import validate_dataset
+else:
+    from data_validation import validate_dataset
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "base.yaml"
 # Check that the vendored training script has been patched for compatibility with our training loop.
@@ -180,6 +185,7 @@ def train_model(
             dataset_dir = dataset_root / f"{shot}shot" / f"seed{seed}"
             if not dataset_dir.is_dir():
                 raise FileNotFoundError(f"Missing dataset: {dataset_dir}")
+            validate_dataset(dataset_dir, expected_shots=shot)
 
             output_dir = output_root / f"{shot}shot" / f"seed{seed}"
             existing_checkpoints = list(

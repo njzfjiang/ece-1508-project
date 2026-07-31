@@ -10,13 +10,17 @@ from pathlib import Path
 
 import yaml
 
+if __package__:
+    from .data_validation import validate_dataset
+else:
+    from data_validation import validate_dataset
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "base.yaml"
 TRAIN_SCRIPT = (
     PROJECT_ROOT / "external" / "img2img-turbo" / "src" / "train_cyclegan_turbo.py"
 )
 MODEL_SCRIPT = PROJECT_ROOT / "external" / "img2img-turbo" / "src" / "cyclegan_turbo.py"
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}
 
 REQUIRED_TRAINER_MARKERS = (
     "max_train_steps is the authoritative stopping condition for CycleGAN-Turbo",
@@ -159,39 +163,6 @@ def training_environment(config: dict, gpu: int) -> dict[str, str]:
     if not config["logging"]["use_wandb"]:
         environment["WANDB_MODE"] = "disabled"
     return environment
-
-
-def image_files(directory: Path) -> list[Path]:
-    return sorted(
-        path
-        for path in directory.iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
-    )
-
-
-def validate_dataset(dataset: Path, expected_shots: int) -> None:
-    """Validate the unpaired few-shot folder contract before using the GPU."""
-    for prompt_name in ("fixed_prompt_a.txt", "fixed_prompt_b.txt"):
-        prompt_path = dataset / prompt_name
-        if not prompt_path.is_file():
-            raise FileNotFoundError(f"Missing domain prompt: {prompt_path}")
-        if not prompt_path.read_text(encoding="utf-8").strip():
-            raise ValueError(f"Domain prompt is empty: {prompt_path}")
-
-    counts: dict[str, int] = {}
-    for folder_name in ("train_A", "train_B", "test_A", "test_B"):
-        folder = dataset / folder_name
-        if not folder.is_dir():
-            raise FileNotFoundError(f"Missing image folder: {folder}")
-        counts[folder_name] = len(image_files(folder))
-
-    if counts["train_A"] != expected_shots or counts["train_B"] != expected_shots:
-        raise ValueError(
-            f"Expected {expected_shots} images in each training domain; "
-            f"found train_A={counts['train_A']} and train_B={counts['train_B']}"
-        )
-    if counts["test_A"] == 0 or counts["test_B"] == 0:
-        raise ValueError("test_A and test_B must contain validation images")
 
 
 def validate_vendor_script(trainer: Path) -> None:

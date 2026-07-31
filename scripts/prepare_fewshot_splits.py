@@ -8,6 +8,8 @@ import shutil
 from pathlib import Path
 from typing import List, Tuple
 
+from PIL import Image
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 
 
@@ -97,6 +99,26 @@ def get_pairs(day_dir: Path, night_dir: Path) -> List[Tuple[Path, Path]]:
     return [(day[n], night[n]) for n in names]
 
 
+def filter_decodable_pairs(
+    pairs: List[Tuple[Path, Path]], label: str
+) -> List[Tuple[Path, Path]]:
+    """Remove corrupt source pairs before any deterministic sampling."""
+    valid = []
+    for day, night in pairs:
+        try:
+            for path in (day, night):
+                with Image.open(path) as image:
+                    image.load()
+        except Exception as exc:
+            print(f"Skipping corrupted {label} pair {day.name}: {exc}")
+            continue
+        valid.append((day, night))
+    if not valid:
+        raise ValueError(f"No decodable paired images found in {label} data")
+    print(f"Validated {len(valid)}/{len(pairs)} {label} pairs")
+    return valid
+
+
 def materialize(pairs, day_dst, night_dst, mode):
     for d, n in pairs:
         link_or_copy(d, day_dst / d.name, mode)
@@ -145,8 +167,10 @@ def main():
     test_day = args.raw_dir / "test" / "day"
     test_night = args.raw_dir / "test" / "night"
 
-    train_pairs = get_pairs(train_day, train_night)
-    test_pairs = get_pairs(test_day, test_night)
+    train_pairs = filter_decodable_pairs(
+        get_pairs(train_day, train_night), "training"
+    )
+    test_pairs = filter_decodable_pairs(get_pairs(test_day, test_night), "test")
 
     if args.test_dir.exists() and args.overwrite:
         shutil.rmtree(args.test_dir)

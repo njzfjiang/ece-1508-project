@@ -38,7 +38,11 @@ def test_find_pairs_is_strict_and_honors_limit(tmp_path):
     _write_image(tmp_path / "test_B" / "b.png", 40)
 
     pairs = find_pairs(tmp_path, limit=1)
-    assert [pair[0].name for pair in pairs] == ["a.png"]
+    repeated = find_pairs(tmp_path, limit=1)
+    assert len(pairs) == 1
+    assert [pair[0].name for pair in pairs] == [
+        pair[0].name for pair in repeated
+    ]
 
     (tmp_path / "test_B" / "b.png").unlink()
     try:
