@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+from PIL import Image, UnidentifiedImageError
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATASET_DIR = PROJECT_ROOT / "data" / "raw" / "darkdriving_lle"
@@ -172,6 +175,80 @@ def prepare_splits(shots: list[int], seeds: list[int]) -> None:
     run(command)
 
 
+def clean_dataset(data_dir):
+
+    data_dir = Path(data_dir)
+
+    removed = set()
+    prompt_files = set()
+
+    for img_path in data_dir.rglob("*"):
+        if img_path.suffix.lower() not in [".jpg", ".jpeg", ".png"]:
+            continue
+
+        try:
+            with Image.open(img_path) as img:
+                img.load()
+
+        except Exception:
+            print("Removing:", img_path)
+
+            removed.add(img_path.name)
+
+            # record corresponding prompt file
+            if "train" in img_path.parent.name:
+                prompt_files.add(img_path.parent.parent / "train_prompts.json")
+
+            elif "test" in img_path.parent.name:
+                prompt_files.add(img_path.parent.parent / "test_prompts.json")
+
+            # remove corrupted image
+            img_path.unlink()
+
+            # remove paired image
+            if img_path.parent.name.endswith("_A"):
+                pair = (
+                    img_path.parent.parent
+                    / img_path.parent.name.replace("_A", "_B")
+                    / img_path.name
+                )
+
+            elif img_path.parent.name.endswith("_B"):
+                pair = (
+                    img_path.parent.parent
+                    / img_path.parent.name.replace("_B", "_A")
+                    / img_path.name
+                )
+
+            else:
+                pair = None
+
+            if pair and pair.exists():
+                print("Removing pair:", pair)
+
+                pair.unlink()
+
+                removed.add(pair.name)
+
+    # remove prompt entries
+    for prompt_file in prompt_files:
+        if not prompt_file.exists():
+            continue
+
+        with open(prompt_file, "r") as f:
+            prompts = json.load(f)
+
+        for name in removed:
+            prompts.pop(name, None)
+
+        with open(prompt_file, "w") as f:
+            json.dump(prompts, f, indent=2)
+
+        print("Updated:", prompt_file)
+
+    print("Removed images:", len(removed))
+
+
 def main() -> int:
     args = parse_args()
     os.chdir(PROJECT_ROOT)
@@ -186,6 +263,9 @@ def main() -> int:
     else:
         check_dataset()
         prepare_splits(args.shots, args.seeds)
+
+    print("\nRemoving corrupted images from processed dataset...")
+    clean_dataset(PROCESSED_DIR)
 
     print("\nSetup complete.")
     return 0
