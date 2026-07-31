@@ -23,7 +23,7 @@ training:
 pix2pix_turbo:
   output_dir: "outputs/full_grid_5090/pix2pix_turbo/train"
   tracker_project_name: "pix2pix_turbo_darkdriving_5090"
-  lora_rank_unet: 8
+  lora_rank_unet: 32
   lora_rank_vae: 4
   lambda_l2: 1.0
   lambda_lpips: 5.0
