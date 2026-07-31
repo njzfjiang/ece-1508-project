@@ -54,6 +54,7 @@ def _images_by_name(directory: Path) -> dict[str, Path]:
 def find_pairs(root: Path, limit: int | None = None) -> list[tuple[Path, Path]]:
     day_dir = root / "test_A"
     night_dir = root / "test_B"
+    seed = 42
     if not day_dir.is_dir() or not night_dir.is_dir():
         raise FileNotFoundError(
             f"Held-out test directories not found: {day_dir} / {night_dir}"
@@ -68,12 +69,16 @@ def find_pairs(root: Path, limit: int | None = None) -> list[tuple[Path, Path]]:
             f"missing day={missing_day[:3]}, missing night={missing_night[:3]}"
         )
     names = sorted(day)
+    np.random.seed(seed)
+    names = np.random.choice(names, size=len(names), replace=False).tolist()
+    
     if not names:
         raise ValueError(f"No paired test images found under {root}")
     if limit is not None:
         if limit <= 0:
             raise ValueError("test_samples must be positive")
         names = names[:limit]
+    
     return [(day[name], night[name]) for name in names]
 
 
