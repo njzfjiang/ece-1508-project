@@ -69,8 +69,8 @@ def find_pairs(root: Path, limit: int | None = None) -> list[tuple[Path, Path]]:
             f"missing day={missing_day[:3]}, missing night={missing_night[:3]}"
         )
     names = sorted(day)
-    np.random.seed(seed)
-    names = np.random.choice(names, size=len(names), replace=False).tolist()
+    rng = np.random.default_rng(seed)
+    rng.shuffle(names)
     
     if not names:
         raise ValueError(f"No paired test images found under {root}")
