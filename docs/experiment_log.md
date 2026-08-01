@@ -150,8 +150,8 @@ pairs), not the per-seed validation directories used above.
 - [x] CycleGAN rank, learning-rate, and identity pilots completed.
 - [x] Pix2Pix checkpoint sweep completed.
 - [x] Formal baseline configuration selected.
-- [ ] Complete the 18-run training grid with `configs/base.yaml`.
-- [ ] Generate held-out test outputs with a fixed generation seed.
-- [ ] Evaluate all model/shot/seed runs and generate aggregate CSV/JSON files.
+- [x] Complete the 18-run training grid with `configs/5090.yaml`.
+- [x] Generate held-out test outputs with a fixed generation seed.
+- [x] Evaluate all model/shot/seed runs and generate aggregate CSV/JSON files.
 - [ ] Perform qualitative failure-case review using the same selected
   checkpoints.

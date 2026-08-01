@@ -1,0 +1,13 @@
+{
+  "checkpoints": {
+    "url": "https://huggingface.co/buckets/CMei032/full_grid_5090_artifacts/resolve/full_grid_5090_checkpoints.tar?download=true",
+    "sha256": "F2278969984404FADE1BA1A90BBBAA91405C2B6162E34C102D05000D3BF18967",
+    "expected_files": 18,
+    "checkpoint_step": 2000
+  },
+  "full_results": {
+    "url": "https://huggingface.co/buckets/CMei032/full_grid_5090_artifacts/resolve/full_grid_5090_artifacts.tar?download=true",
+    "sha256": "018FB669EFB60720FAC104F2E745B88C3CCBA9E51C3C27BAD60F941B9154E077",
+    "test_samples": 200
+  }
+}
