@@ -143,6 +143,16 @@ checkpoints are available. The formal evaluation must use 200 held-out samples
 as configured in `base.yaml` (or explicitly document a change to all 3,632
 pairs), not the per-seed validation directories used above.
 
+### Exploratory 5-shot extension
+
+After inspecting the preregistered 10/20/50-shot main grid, we found no robust
+breaking point within the tested range. We therefore planned one exploratory
+extension at 5 shots for both models and all three seeds. The extension keeps
+the main-grid hyperparameters, 2,000-step training budget, deterministic
+200-image test subset, metric definitions, and breaking-point criteria fixed.
+It is reported separately as post-hoc exploratory analysis; no additional shot
+levels will be selected in response to its outcome.
+
 ## Status
 
 - [x] Data direction and split contract verified.
@@ -153,5 +163,6 @@ pairs), not the per-seed validation directories used above.
 - [x] Complete the 18-run training grid with `configs/5090.yaml`.
 - [x] Generate held-out test outputs with a fixed generation seed.
 - [x] Evaluate all model/shot/seed runs and generate aggregate CSV/JSON files.
+- [ ] Run the six exploratory 5-shot extensions and append their evaluation.
 - [ ] Perform qualitative failure-case review using the same selected
   checkpoints.
