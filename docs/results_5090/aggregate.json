@@ -1,6 +1,46 @@
 [
   {
     "model": "cyclegan",
+    "shot": 5,
+    "metric": "clip_similarity",
+    "num_seeds": 3,
+    "mean": 0.8979968501130738,
+    "std_across_seeds": 0.006252293199472812,
+    "min": 0.8933434945344925,
+    "max": 0.9051037874817848
+  },
+  {
+    "model": "cyclegan",
+    "shot": 5,
+    "metric": "cmmd",
+    "num_seeds": 3,
+    "mean": 0.03895965667938506,
+    "std_across_seeds": 0.006699102948607324,
+    "min": 0.03127396612671873,
+    "max": 0.043561185593693263
+  },
+  {
+    "model": "cyclegan",
+    "shot": 5,
+    "metric": "lpips",
+    "num_seeds": 3,
+    "mean": 0.5860396173596382,
+    "std_across_seeds": 0.0222263783883229,
+    "min": 0.5680421435832977,
+    "max": 0.6108838614821434
+  },
+  {
+    "model": "cyclegan",
+    "shot": 5,
+    "metric": "ssim",
+    "num_seeds": 3,
+    "mean": 0.6338073427478473,
+    "std_across_seeds": 0.014546870373994493,
+    "min": 0.617700401544571,
+    "max": 0.6459883151948452
+  },
+  {
+    "model": "cyclegan",
     "shot": 10,
     "metric": "clip_similarity",
     "num_seeds": 3,
@@ -118,6 +158,46 @@
     "std_across_seeds": 0.02463296551735299,
     "min": 0.6731474547088147,
     "max": 0.7163064396381378
+  },
+  {
+    "model": "pix2pix",
+    "shot": 5,
+    "metric": "clip_similarity",
+    "num_seeds": 3,
+    "mean": 0.895548286139965,
+    "std_across_seeds": 0.01427692763024258,
+    "min": 0.8790929487347603,
+    "max": 0.9046402844786644
+  },
+  {
+    "model": "pix2pix",
+    "shot": 5,
+    "metric": "cmmd",
+    "num_seeds": 3,
+    "mean": 0.052254169374444714,
+    "std_across_seeds": 0.01721756421828732,
+    "min": 0.03485912234691857,
+    "max": 0.06928858510254421
+  },
+  {
+    "model": "pix2pix",
+    "shot": 5,
+    "metric": "lpips",
+    "num_seeds": 3,
+    "mean": 0.5329855672518412,
+    "std_across_seeds": 0.002334743508865599,
+    "min": 0.5302909837663173,
+    "max": 0.5344066298007966
+  },
+  {
+    "model": "pix2pix",
+    "shot": 5,
+    "metric": "ssim",
+    "num_seeds": 3,
+    "mean": 0.6335626988857984,
+    "std_across_seeds": 0.0381446963248517,
+    "min": 0.6090375337749719,
+    "max": 0.6775097423791885
   },
   {
     "model": "pix2pix",

@@ -163,6 +163,6 @@ levels will be selected in response to its outcome.
 - [x] Complete the 18-run training grid with `configs/5090.yaml`.
 - [x] Generate held-out test outputs with a fixed generation seed.
 - [x] Evaluate all model/shot/seed runs and generate aggregate CSV/JSON files.
-- [ ] Run the six exploratory 5-shot extensions and append their evaluation.
+- [x] Run the six exploratory 5-shot extensions and append their evaluation.
 - [ ] Perform qualitative failure-case review using the same selected
   checkpoints.
