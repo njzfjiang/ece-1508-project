@@ -45,6 +45,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-root", type=Path)
     parser.add_argument("--output", type=Path, help="Exact single-run output directory")
     parser.add_argument(
+        "--generated-root",
+        type=Path,
+        help="Root for multi-run outputs, overriding eval.generated_dir",
+    )
+    parser.add_argument(
+        "--filenames-file",
+        type=Path,
+        help="Text file containing one held-out filename per line",
+    )
+    parser.add_argument(
         "--prompt", default="a driving scene during the night"
     )
     parser.add_argument("--test-samples", type=int)
@@ -70,6 +80,8 @@ def main() -> int:
     config = OmegaConf.load(args.config.resolve())
     if (args.checkpoint is not None or args.output is not None) and not _single_run(args):
         raise ValueError("--checkpoint and --output require one model, shot, and seed")
+    if args.output is not None and args.generated_root is not None:
+        raise ValueError("--output and --generated-root cannot be used together")
     if args.checkpoint_root is not None and len(args.models) != 1:
         raise ValueError("--checkpoint-root requires exactly one model")
 
@@ -81,19 +93,40 @@ def main() -> int:
             str(OmegaConf.select(config, "eval.test_root", default="data/processed/test")),
         )
     )
+    selected_filenames = None
+    if args.filenames_file is not None:
+        filenames_path = args.filenames_file.resolve()
+        if not filenames_path.is_file():
+            raise FileNotFoundError(f"Filenames file not found: {filenames_path}")
+        selected_filenames = [
+            line.strip()
+            for line in filenames_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        if args.test_samples is not None:
+            raise ValueError("--test-samples cannot be combined with --filenames-file")
+
     test_samples = args.test_samples
-    if test_samples is None:
+    if selected_filenames is None and test_samples is None:
         test_samples = int(OmegaConf.select(config, "eval.test_samples", default=200))
-    pairs = find_pairs(test_root, limit=test_samples)
-    generated_root = resolve_path(
-        PROJECT_ROOT,
-        str(
-            OmegaConf.select(
-                config,
-                "eval.generated_dir",
-                default="results/generated",
-            )
-        ),
+    pairs = find_pairs(
+        test_root,
+        limit=test_samples,
+        filenames=selected_filenames,
+    )
+    generated_root = (
+        resolve_path(PROJECT_ROOT, args.generated_root)
+        if args.generated_root is not None
+        else resolve_path(
+            PROJECT_ROOT,
+            str(
+                OmegaConf.select(
+                    config,
+                    "eval.generated_dir",
+                    default="results/generated",
+                )
+            ),
+        )
     )
     if not torch.cuda.is_available():
         raise RuntimeError("Checkpoint generation requires CUDA")

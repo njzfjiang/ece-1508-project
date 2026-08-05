@@ -248,6 +248,31 @@ prompt, test root, and filenames. Evaluation carries that manifest into its
 result metadata. `--test-samples` must be identical across generation and
 evaluation; the full orchestrator forwards it to both stages.
 
+For a compact qualitative comparison, select three reproducible examples from
+the per-sample evaluation CSVs and regenerate only those filenames:
+
+```bash
+python scripts/select_qualitative_samples.py \
+  --metrics-root results/full_grid_5090/evaluation \
+  --output-dir results/qualitative_selection
+
+python scripts/generate_samples.py \
+  --models pix2pix cyclegan \
+  --shots 5 10 50 \
+  --seeds 1 \
+  --config configs/5090.yaml \
+  --test-root data/processed/test \
+  --filenames-file results/qualitative_selection/selected_filenames.txt \
+  --generated-root results/qualitative_generated
+```
+
+The selector writes typical, challenging, and breaking-sensitive choices with
+their scores to `selection.csv` and `selection.json`. If archived runs used
+different held-out filename subsets, it warns and restricts selection to the
+intersection shared by every run. Filename-derived generation seeds ensure that
+regenerating a selected image reproduces the original sample for the same
+checkpoint and configuration.
+
 Generation output is written under:
 
 ```text

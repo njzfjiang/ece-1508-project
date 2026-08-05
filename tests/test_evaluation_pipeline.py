@@ -53,6 +53,23 @@ def test_find_pairs_is_strict_and_honors_limit(tmp_path):
         raise AssertionError("misaligned held-out data should fail")
 
 
+def test_find_pairs_accepts_an_exact_filename_selection(tmp_path):
+    _write_image(tmp_path / "test_A" / "a.png", 10)
+    _write_image(tmp_path / "test_B" / "a.png", 20)
+    _write_image(tmp_path / "test_A" / "b.png", 30)
+    _write_image(tmp_path / "test_B" / "b.png", 40)
+
+    pairs = find_pairs(tmp_path, filenames=["b.png", "a.png"])
+    assert [day.name for day, _ in pairs] == ["b.png", "a.png"]
+
+    try:
+        find_pairs(tmp_path, filenames=["missing.png"])
+    except FileNotFoundError as error:
+        assert "missing.png" in str(error)
+    else:
+        raise AssertionError("missing selected filename should fail")
+
+
 def test_image_to_tensor_accepts_path(tmp_path):
     path = tmp_path / "image.png"
     _write_image(path, 128)

@@ -51,7 +51,11 @@ def _images_by_name(directory: Path) -> dict[str, Path]:
     }
 
 
-def find_pairs(root: Path, limit: int | None = None) -> list[tuple[Path, Path]]:
+def find_pairs(
+    root: Path,
+    limit: int | None = None,
+    filenames: list[str] | None = None,
+) -> list[tuple[Path, Path]]:
     day_dir = root / "test_A"
     night_dir = root / "test_B"
     seed = 42
@@ -68,12 +72,26 @@ def find_pairs(root: Path, limit: int | None = None) -> list[tuple[Path, Path]]:
             "Held-out test set is not filename-aligned: "
             f"missing day={missing_day[:3]}, missing night={missing_night[:3]}"
         )
-    names = sorted(day)
-    rng = np.random.default_rng(seed)
-    rng.shuffle(names)
-    
-    if not names:
+    available_names = sorted(day)
+    if not available_names:
         raise ValueError(f"No paired test images found under {root}")
+
+    if filenames is None:
+        names = available_names
+        rng = np.random.default_rng(seed)
+        rng.shuffle(names)
+    else:
+        names = list(filenames)
+        if not names:
+            raise ValueError("filenames must contain at least one image name")
+        if len(names) != len(set(names)):
+            raise ValueError("filenames contains duplicate image names")
+        missing = sorted(set(names) - set(available_names))
+        if missing:
+            raise FileNotFoundError(
+                f"Selected test images not found under {root}: {missing[:3]}"
+            )
+
     if limit is not None:
         if limit <= 0:
             raise ValueError("test_samples must be positive")
