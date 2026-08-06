@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.eval.metrics import MetricsCalculator
+from src.eval.metrics import CMMDCalculator, MetricsCalculator
 from src.eval.utils import image_to_tensor, summarize
 
 
@@ -17,15 +17,14 @@ def evaluate_generated_pairs(
     generated_dir: Path,
     output_dir: Path,
     metrics_calculator: MetricsCalculator,
+    cmmd_calculator: CMMDCalculator | None,
     requested_metrics: list[str],
     metadata: dict,
-    cmmd_sigma: float = 1.0,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     rows: list[dict] = []
-    generated_features: list[np.ndarray] = []
-    target_features: list[np.ndarray] = []
-    needs_clip = bool({"clip_similarity", "cmmd"} & set(requested_metrics))
+    cmmd_generated_paths: list[Path] = []
+    cmmd_target_paths: list[Path] = []
 
     for day_path, night_path in pairs:
         generated_path = generated_dir / day_path.name
@@ -49,23 +48,24 @@ def evaluate_generated_pairs(
             row["ssim"] = metrics_calculator.compute_ssim(generated, target)
         if "lpips" in requested_metrics:
             row["lpips"] = metrics_calculator.compute_lpips(generated, target)
-        if needs_clip:
+        if "clip_similarity" in requested_metrics:
             generated_feature = metrics_calculator.extract_clip_features(generated)[0]
             target_feature = metrics_calculator.extract_clip_features(target)[0]
-            generated_features.append(generated_feature)
-            target_features.append(target_feature)
-            if "clip_similarity" in requested_metrics:
-                row["clip_similarity"] = float(
-                    np.dot(generated_feature, target_feature)
-                )
+            row["clip_similarity"] = float(
+                np.dot(generated_feature, target_feature)
+            )
+        if "cmmd" in requested_metrics:
+            cmmd_generated_paths.append(generated_path)
+            cmmd_target_paths.append(night_path)
         rows.append(row)
 
     summary = summarize(rows, requested_metrics)
     if "cmmd" in requested_metrics:
-        summary["cmmd"] = metrics_calculator.compute_cmmd_from_features(
-            np.stack(generated_features),
-            np.stack(target_features),
-            sigma=cmmd_sigma,
+        if cmmd_calculator is None:
+            raise ValueError("CMMD was requested but no CMMD calculator was provided")
+        summary["cmmd"] = cmmd_calculator.compute_from_paths(
+            cmmd_generated_paths,
+            cmmd_target_paths,
         )
 
     csv_path = output_dir / "per_sample_metrics.csv"

@@ -266,7 +266,7 @@ def evaluate_rank(
 
     from src.eval.evaluate import evaluate_generated_pairs
     from src.eval.generate import generate
-    from src.eval.metrics import MetricsCalculator
+    from src.eval.metrics import CMMDCalculator, MetricsCalculator
     from src.eval.utils import find_pairs
 
     device_index = gpu if gpu is not None else torch.cuda.current_device()
@@ -291,12 +291,21 @@ def evaluate_rank(
         device=f"cuda:{device_index}",
         requested_metrics=set(settings.metrics),
     )
+    cmmd_calculator = (
+        CMMDCalculator(
+            device=f"cuda:{device_index}",
+            sigma=settings.cmmd_sigma,
+        )
+        if "cmmd" in settings.metrics
+        else None
+    )
     try:
         result = evaluate_generated_pairs(
             pairs=pairs,
             generated_dir=generated_dir,
             output_dir=evaluation_dir,
             metrics_calculator=calculator,
+            cmmd_calculator=cmmd_calculator,
             requested_metrics=list(settings.metrics),
             metadata={
                 "model": "cyclegan",
@@ -307,10 +316,11 @@ def evaluate_rank(
                 "split": "validation",
                 "generation_seed": 0,
             },
-            cmmd_sigma=settings.cmmd_sigma,
         )
     finally:
         del calculator
+        if cmmd_calculator is not None:
+            del cmmd_calculator
         gc.collect()
         torch.cuda.empty_cache()
     return result

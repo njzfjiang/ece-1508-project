@@ -144,14 +144,12 @@ def build_test(pairs, out_dir, src_prompt, tgt_prompt, mode):
     add_prompts(pairs, out_dir / "test_prompts.json", src_prompt, tgt_prompt)
 
 
-def build_train(pairs, out, shot, seed, src_prompt, tgt_prompt, mode, overwrite):
+def build_train(sampled, out, src_prompt, tgt_prompt, mode, overwrite):
     if out.exists():
         if overwrite:
             shutil.rmtree(out)
         else:
             return False
-
-    sampled = random.Random(seed).sample(pairs, shot)
 
     materialize(sampled, out / "train_A", out / "train_B", mode)
     add_prompts(sampled, out / "train_prompts.json", src_prompt, tgt_prompt)
@@ -187,18 +185,22 @@ def main():
     val_pairs = rng.sample(train_pairs, min(100, len(train_pairs)))
     remaining_train = [p for p in train_pairs if p not in val_pairs]
 
-    for shot in args.shots:
-        if shot > len(remaining_train):
-            raise ValueError(f"{shot}-shot exceeds dataset size")
+    shots = sorted(set(args.shots))
+    if not shots or shots[0] <= 0:
+        raise ValueError("Shot sizes must be positive")
+    if shots[-1] > len(remaining_train):
+        raise ValueError(f"{shots[-1]}-shot exceeds dataset size")
 
-        for seed in args.seeds:
+    for seed in args.seeds:
+        # Draw one ordered maximum-size sample per seed. Smaller splits are
+        # prefixes, making the few-shot grid explicitly nested by construction.
+        ordered_sample = random.Random(seed).sample(remaining_train, shots[-1])
+        for shot in shots:
             out_dir = args.output_root / f"{shot}shot" / f"seed{seed}"
 
             created = build_train(
-                remaining_train,
+                ordered_sample[:shot],
                 out_dir,
-                shot,
-                seed,
                 args.source_prompt,
                 args.target_prompt,
                 args.mode,

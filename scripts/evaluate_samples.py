@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.eval.evaluate import evaluate_generated_pairs
-from src.eval.metrics import MetricsCalculator
+from src.eval.metrics import CMMDCalculator, MetricsCalculator
 from src.eval.summarize_evaluations import summarize
 from src.eval.utils import find_pairs, resolve_path
 
@@ -100,17 +100,35 @@ def main() -> int:
             str(OmegaConf.select(config, "eval.output_dir", default="results/evaluation")),
         )
     )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    clip_model_name = str(
+        OmegaConf.select(config, "eval.clip_model", default="ViT-B/32")
+    )
     calculator = MetricsCalculator(
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=device,
         lpips_backbone=str(
             OmegaConf.select(config, "eval.lpips_backbone", default="alex")
         ),
-        clip_model_name=str(
-            OmegaConf.select(config, "eval.clip_model", default="ViT-B/32")
-        ),
+        clip_model_name=clip_model_name,
         requested_metrics=set(metrics),
     )
-    cmmd_sigma = float(OmegaConf.select(config, "eval.cmmd_sigma", default=1.0))
+    cmmd_calculator = None
+    if "cmmd" in metrics:
+        cmmd_calculator = CMMDCalculator(
+            device=device,
+            clip_model_name=str(
+                OmegaConf.select(
+                    config,
+                    "eval.cmmd_clip_model",
+                    default="ViT-L/14@336px",
+                )
+            ),
+            batch_size=int(
+                OmegaConf.select(config, "eval.cmmd_batch_size", default=32)
+            ),
+            sigma=float(OmegaConf.select(config, "eval.cmmd_sigma", default=10.0)),
+            scale=float(OmegaConf.select(config, "eval.cmmd_scale", default=1000.0)),
+        )
 
     for model in args.models:
         for shot in args.shots:
@@ -145,6 +163,16 @@ def main() -> int:
                     "task": "day_to_night",
                     "test_root": str(test_root.resolve()),
                     "metrics": metrics,
+                    "metric_configuration": {
+                        "clip_similarity_model": (
+                            clip_model_name if "clip_similarity" in metrics else None
+                        ),
+                        "cmmd": (
+                            cmmd_calculator.configuration
+                            if cmmd_calculator is not None
+                            else None
+                        ),
+                    },
                     "generation": generation or None,
                 }
                 print(f"Evaluating {model}, {shot}-shot, seed {seed}")
@@ -153,9 +181,9 @@ def main() -> int:
                     generated_dir=generated_dir,
                     output_dir=output_dir,
                     metrics_calculator=calculator,
+                    cmmd_calculator=cmmd_calculator,
                     requested_metrics=metrics,
                     metadata=metadata,
-                    cmmd_sigma=cmmd_sigma,
                 )
                 print(json.dumps(result["metrics"], indent=2))
 

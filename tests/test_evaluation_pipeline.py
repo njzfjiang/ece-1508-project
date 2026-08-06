@@ -6,6 +6,7 @@ from PIL import Image
 import torch
 
 from src.eval.evaluate import evaluate_generated_pairs
+from src.eval.metrics import CMMDCalculator
 from src.eval.generate import _image_to_tensor, _output_to_pil, _sample_seed
 from src.eval.utils import find_checkpoint, find_pairs, image_to_tensor
 
@@ -19,10 +20,10 @@ class FakeMetrics:
         feature = np.asarray([[mean + 1.0, 1.0]], dtype=np.float32)
         return feature / np.linalg.norm(feature, axis=1, keepdims=True)
 
-    def compute_cmmd_from_features(self, generated, target, sigma):
-        assert generated.ndim == 2
-        assert target.ndim == 2
-        assert sigma == 2.0
+class FakeCMMD:
+    def compute_from_paths(self, generated, target):
+        assert [path.name for path in generated] == ["a.png"]
+        assert [path.name for path in target] == ["a.png"]
         return 0.125
 
 
@@ -119,9 +120,9 @@ def test_evaluation_writes_reproducible_outputs(tmp_path):
         generated_dir=generated.parent,
         output_dir=output,
         metrics_calculator=FakeMetrics(),
+        cmmd_calculator=FakeCMMD(),
         requested_metrics=["ssim", "clip_similarity", "cmmd"],
         metadata={"model": "pix2pix", "checkpoint": "model_2.pkl"},
-        cmmd_sigma=2.0,
     )
 
     assert result["metrics"]["ssim"]["mean"] == 0.75
@@ -129,3 +130,18 @@ def test_evaluation_writes_reproducible_outputs(tmp_path):
     assert (output / "per_sample_metrics.csv").is_file()
     saved = json.loads((output / "summary.json").read_text(encoding="utf-8"))
     assert saved["metadata"]["checkpoint"] == "model_2.pkl"
+
+
+def test_official_cmmd_kernel_uses_sigma_and_reporting_scale():
+    generated = np.asarray([[1.0, 0.0]], dtype=np.float32)
+    target = np.asarray([[0.0, 1.0]], dtype=np.float32)
+
+    value = CMMDCalculator.compute_from_features(
+        generated,
+        target,
+        sigma=10.0,
+        scale=1000.0,
+    )
+
+    expected = 1000.0 * (2.0 - 2.0 * np.exp(-0.01))
+    assert np.isclose(value, expected)

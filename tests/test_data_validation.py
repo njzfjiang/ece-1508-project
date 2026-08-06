@@ -5,6 +5,7 @@ import pytest
 from PIL import Image
 
 from scripts.prepare_fewshot_splits import filter_decodable_pairs
+from scripts.prepare_nested_subset import derive_seed_split
 from src.train.data_validation import validate_dataset
 
 
@@ -65,3 +66,41 @@ def test_prepare_filter_removes_entire_corrupted_pair(tmp_path):
     )
 
     assert result == [(good_day, good_night)]
+
+
+def test_nested_subset_uses_ordered_prefix_from_source_split(tmp_path):
+    source = tmp_path / "processed" / "10shot" / "seed1"
+    names = [f"sample_{index}.jpg" for index in range(10)]
+    for domain in ("train_A", "train_B"):
+        for name in names:
+            _image(source / domain / name)
+    for domain in ("test_A", "test_B"):
+        _image(source / domain / "held_out.jpg")
+    (source / "fixed_prompt_a.txt").write_text("day\n", encoding="utf-8")
+    (source / "fixed_prompt_b.txt").write_text("night\n", encoding="utf-8")
+    (source / "train_prompts.json").write_text(
+        json.dumps({name: "night" for name in names}), encoding="utf-8"
+    )
+    (source / "test_prompts.json").write_text(
+        json.dumps({"held_out.jpg": "night"}), encoding="utf-8"
+    )
+
+    destination = derive_seed_split(
+        data_root=tmp_path / "processed",
+        source_shot=10,
+        target_shot=5,
+        seed=1,
+        mode="copy",
+        overwrite=False,
+    )
+
+    actual = json.loads(
+        (destination / "train_prompts.json").read_text(encoding="utf-8")
+    )
+    assert list(actual) == names[:5]
+    assert {path.name for path in (destination / "train_A").iterdir()} == set(
+        names[:5]
+    )
+    assert json.loads(
+        (destination / "split_manifest.json").read_text(encoding="utf-8")
+    )["nested"] is True

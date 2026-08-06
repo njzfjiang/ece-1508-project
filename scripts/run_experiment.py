@@ -55,6 +55,16 @@ def parse_args():
     )
 
     parser.add_argument("--test-samples", type=int)
+    parser.add_argument(
+        "--generated-root",
+        type=Path,
+        help="Override eval.generated_dir for generation and evaluation",
+    )
+    parser.add_argument(
+        "--evaluation-root",
+        type=Path,
+        help="Override eval.output_dir for evaluation and summary files",
+    )
 
     parser.add_argument(
         "--prompt",
@@ -146,6 +156,8 @@ def main():
 
         if args.use_fp16:
             cmd.append("--use-fp16")
+        if args.generated_root is not None:
+            cmd += ["--generated-root", str(args.generated_root)]
 
         run(cmd)
 
@@ -169,6 +181,10 @@ def main():
 
         if args.test_samples:
             cmd += ["--test-samples", str(args.test_samples)]
+        if args.generated_root is not None:
+            cmd += ["--generated-root", str(args.generated_root)]
+        if args.evaluation_root is not None:
+            cmd += ["--output-root", str(args.evaluation_root)]
 
         if args.metrics:
             cmd += [

@@ -1,4 +1,6 @@
 from skimage.metrics import structural_similarity as ssim_sk
+from pathlib import Path
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -38,7 +40,7 @@ class MetricsCalculator:
             self.lpips_model = lpips.LPIPS(net=lpips_backbone).to(device)
             self.lpips_model.eval()
 
-        if self.requested_metrics & {"clip_similarity", "cmmd"}:
+        if "clip_similarity" in self.requested_metrics:
             import clip
 
             self.clip_model, self.clip_preprocess = clip.load(
@@ -177,13 +179,94 @@ class MetricsCalculator:
 
         return np.stack(features, axis=0)
 
+    def evaluate_pair(
+        self,
+        generated: torch.Tensor,
+        ground_truth: torch.Tensor,
+    ) -> dict:
+        """
+        Evaluate per-image metrics for one generated/ground-truth pair.
+
+        CMMD is intentionally excluded because it is a distribution-level metric.
+        """
+        return {
+            "ssim": self.compute_ssim(generated, ground_truth),
+            "lpips": self.compute_lpips(generated, ground_truth),
+            "clip_similarity": self.compute_clip_similarity(generated, ground_truth),
+        }
+
+
+class CMMDCalculator:
+    """Official CMMD definition implemented with the released OpenAI CLIP weights.
+
+    The reference implementation uses ViT-L/14@336px embeddings, a Gaussian
+    kernel with sigma=10, the biased/minimum-variance MMD estimator, and a 1000x
+    reporting scale. CMMD is computed once over complete image sets, not per pair.
+    """
+
+    def __init__(
+        self,
+        device: str = "cuda",
+        clip_model_name: str = "ViT-L/14@336px",
+        batch_size: int = 32,
+        sigma: float = 10.0,
+        scale: float = 1000.0,
+    ):
+        if device.startswith("cuda") and not torch.cuda.is_available():
+            device = "cpu"
+        if batch_size <= 0:
+            raise ValueError("CMMD batch size must be positive")
+        if sigma <= 0:
+            raise ValueError("CMMD sigma must be positive")
+        if scale <= 0:
+            raise ValueError("CMMD scale must be positive")
+
+        import clip
+
+        self.device = device
+        self.clip_model_name = clip_model_name
+        self.batch_size = batch_size
+        self.sigma = sigma
+        self.scale = scale
+        self.clip_model, self.clip_preprocess = clip.load(
+            clip_model_name, device=device
+        )
+        self.clip_model.eval()
+
+    @property
+    def configuration(self) -> dict[str, object]:
+        return {
+            "clip_model": self.clip_model_name,
+            "sigma": self.sigma,
+            "scale": self.scale,
+            "estimator": "biased_minimum_variance",
+        }
+
+    def extract_path_features(self, paths: list[Path]) -> np.ndarray:
+        if not paths:
+            raise ValueError("CMMD requires at least one image path")
+
+        feature_batches = []
+        with torch.no_grad():
+            for start in range(0, len(paths), self.batch_size):
+                processed = []
+                for path in paths[start : start + self.batch_size]:
+                    with Image.open(path) as image:
+                        processed.append(self.clip_preprocess(image.convert("RGB")))
+                batch = torch.stack(processed).to(self.device)
+                embeddings = self.clip_model.encode_image(batch)
+                embeddings = F.normalize(embeddings, p=2, dim=-1)
+                feature_batches.append(embeddings.cpu().float().numpy())
+
+        return np.concatenate(feature_batches, axis=0)
+
     @staticmethod
-    def compute_cmmd_from_features(
+    def compute_from_features(
         generated_features: np.ndarray,
         ground_truth_features: np.ndarray,
-        sigma: float | None = None,
+        sigma: float = 10.0,
+        scale: float = 1000.0,
     ) -> float:
-        """Compute squared Gaussian-kernel MMD over CLIP image features."""
         generated_features = np.asarray(generated_features, dtype=np.float64)
         ground_truth_features = np.asarray(ground_truth_features, dtype=np.float64)
         if generated_features.ndim != 2 or ground_truth_features.ndim != 2:
@@ -194,14 +277,8 @@ class MetricsCalculator:
             )
         if len(generated_features) == 0 or len(ground_truth_features) == 0:
             raise ValueError("CMMD requires at least one generated and target feature")
-
-        combined = np.concatenate([generated_features, ground_truth_features], axis=0)
-        if sigma is None:
-            distances = _squared_distances(combined, combined)
-            positive = distances[distances > 0]
-            sigma = float(np.sqrt(np.median(positive))) if positive.size else 1.0
-        if sigma <= 0:
-            raise ValueError("CMMD sigma must be positive")
+        if sigma <= 0 or scale <= 0:
+            raise ValueError("CMMD sigma and scale must be positive")
 
         gamma = 1.0 / (2.0 * sigma**2)
         k_xx = np.exp(
@@ -213,36 +290,21 @@ class MetricsCalculator:
         k_xy = np.exp(
             -gamma * _squared_distances(generated_features, ground_truth_features)
         )
-        return float(k_xx.mean() + k_yy.mean() - 2.0 * k_xy.mean())
+        return float(scale * (k_xx.mean() + k_yy.mean() - 2.0 * k_xy.mean()))
 
-    def compute_cmmd(
+    def compute_from_paths(
         self,
-        generated: torch.Tensor,
-        ground_truth: torch.Tensor,
-        sigma: float | None = None,
+        generated_paths: list[Path],
+        ground_truth_paths: list[Path],
     ) -> float:
-        """Compute CLIP Maximum Mean Discrepancy for two image batches."""
-        generated_features = self.extract_clip_features(generated)
-        ground_truth_features = self.extract_clip_features(ground_truth)
-        return self.compute_cmmd_from_features(
-            generated_features, ground_truth_features, sigma=sigma
+        if len(generated_paths) != len(ground_truth_paths):
+            raise ValueError("CMMD image sets must have the same size")
+        return self.compute_from_features(
+            self.extract_path_features(generated_paths),
+            self.extract_path_features(ground_truth_paths),
+            sigma=self.sigma,
+            scale=self.scale,
         )
-
-    def evaluate_pair(
-        self,
-        generated: torch.Tensor,
-        ground_truth: torch.Tensor,
-    ) -> dict:
-        """
-        Evaluate a single (generated, ground_truth) pair.
-        Returns dict with SSIM, LPIPS, CLIP similarity, and CMMD.
-        """
-        return {
-            "cmmd": self.compute_cmmd(generated, ground_truth),
-            "ssim": self.compute_ssim(generated, ground_truth),
-            "lpips": self.compute_lpips(generated, ground_truth),
-            "clip_similarity": self.compute_clip_similarity(generated, ground_truth),
-        }
 
 
 def _squared_distances(first: np.ndarray, second: np.ndarray) -> np.ndarray:
