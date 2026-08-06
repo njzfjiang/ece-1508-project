@@ -1,163 +1,163 @@
 \documentclass{article}
-% if you need to pass options to natbib, use, e.g.:
-%     \PassOptionsToPackage{numbers, compress}{natbib}
-% before loading neurips_2023
+\PassOptionsToPackage{numbers,compress}{natbib}
 \usepackage[final]{neurips}
-% to avoid loading the natbib package, add option nonatbib:
-%    \usepackage[nonatbib]{neurips}
 
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
 
-\usepackage[utf8]{inputenc} % allow utf-8 input
-\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{hyperref}       % hyperlinks
-\usepackage{url}            % simple URL typesetting
-\usepackage{booktabs}       % professional-quality tables
-\usepackage{amsfonts}       % blackboard math symbols
-\usepackage{nicefrac}       % compact symbols for 1/2, etc.
-\usepackage{microtype}      % microtypography
-\usepackage{xcolor}         % colors
+\setlength{\textfloatsep}{7pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
 
-
-\title{Project Title}
-
-
-% The \author macro works with any number of authors. There are two commands
-% used to separate the names and addresses of multiple authors: \And and \AND.
-%
-% Using \And between authors leaves it to LaTeX to determine where to break the
-% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
-% authors names on the first line, and the last on the second line, try using
-% \AND instead of \And before the third author name.
-
+\title{Few-Shot Day-to-Night Translation: Paired vs. Unpaired Supervision}
 
 \author{%
-  Yuxin Chen\\
-  Department of Electrical \& Computer Engineering\\
-  University of Toronto\\
-  \texttt{katy.chen@mail.utoronto.ca} \\
-  % more authors
-  \And
-  Chen Hao Zhang\\
-  Department of Electrical \& Computer Engineering\\
-  University of Toronto\\
-  \texttt{chenhao.zhang@mail.utoronto.ca} \\
-  \AND
-  Meixuan Chen \\
-  Department of Electrical \& Computer Engineering \\
-  University of Toronto \\
-  \texttt{meixan.chen@mail.utoronto.ca} \\
-  % \And
-  % Coauthor \\
-  % Affiliation \\
-  % Address \\
-  % \texttt{email} \\
-  % \And
-  % Coauthor \\
-  % Affiliation \\
-  % Address \\
-  % \texttt{email} \\
+  Yuxin Chen \quad Chen Hao Zhang \quad Meixuan Chen\\
+  Department of Electrical \& Computer Engineering, University of Toronto\\
+  \texttt{\{katy.chen, chenhao.zhang, meixan.chen\}@mail.utoronto.ca}
 }
 
 \begin{document}
-
-
 \maketitle
 
-
 \begin{abstract}
-An abstract of the report.
+We compare paired and unpaired supervision for few-shot day-to-night driving-scene translation using pix2pix-turbo and CycleGAN-Turbo, two one-step models built on SD-Turbo. We train each model with 5, 10, 20, and 50 examples using three seeds, then evaluate the same 200 held-out pairs with SSIM, LPIPS, CLIP similarity, and CMMD. pix2pix-turbo consistently achieves lower LPIPS, whereas CycleGAN-Turbo consistently achieves lower CMMD, revealing a trade-off between paired-target perceptual fidelity and distributional alignment. Under our pre-specified criterion---significant adjacent-shot mean degradation plus increased between-seed and test-sample variance---both models exhibit a 5-shot breaking point on different metrics: LPIPS for pix2pix-turbo (Holm $p=0.040$) and SSIM for CycleGAN-Turbo (Holm $p=0.046$). CycleGAN-Turbo also shows secondary, exploratory CLIP instability at 10 shots (Holm $p=0.083$). Because each condition has only three seeds, these statistical findings are criterion-confirmed within this experiment but should be interpreted as exploratory beyond it.
 \end{abstract}
 
-\section*{Assentation of Teamwork}
-Here, you explain how each member in the group has contributed to the project. 
-
-
-
 \section{Introduction}
-Here, you explain briefly the target problem and motivation to solve it via Deep Learning.
 
-\section{Preliminaries and Problem Formulation}
-Here, you formulate the problem. Specify the ultimate goal. If there are some new concepts that you had to learn to understand this project, you could briefly explain them. 
-	
-\section{Design}
-You explain the details of your design, plot diagrams if needed and name the key components. 
+Day-to-night translation can expand driving data across illumination conditions, but paired examples are costly to collect. Paired methods can directly imitate a target transformation, while unpaired methods trade correspondence for domain-level supervision. This distinction is especially consequential when only a handful of images are available.
 
+pix2pix learns conditional translation from aligned pairs \cite{isola2017image}; CycleGAN instead uses adversarial and cycle-consistency objectives on independently sampled domains \cite{zhu2017unpaired}. img2img-turbo adapts these paradigms to one-step diffusion, providing pix2pix-turbo and CycleGAN-Turbo variants with a shared SD-Turbo backbone \cite{parmar2024one}. Their few-shot robustness, however, is not well characterized.
 
+We ask: (1) which supervision paradigm learns day-to-night translation more effectively at 5--50 shots, and (2) at which shot level does performance become statistically unstable? We contribute a controlled $2$-model $\times$ $4$-shot $\times$ $3$-seed comparison, a fixed held-out evaluation protocol, and an explicit breaking-point analysis that separates mean degradation from seed- and sample-level variability.
 
+\section{Methods}
 
-\section{Methodology}
-You should explain the algorithms you have used in your design and include pseudo-code if necessary. If an algorithm is new, you should briefly explain it. You may also name the specific modules and/or libraries you have used for implementation.
+\subsection{Models and Objectives}
 
+Both models initialize from SD-Turbo \cite{sauer2023adversarial} and use parameter-efficient adaptation \cite{hu2021lora} with U-Net LoRA rank 32 and VAE rank 4. pix2pix-turbo receives aligned day/night pairs and combines L2, LPIPS \cite{zhang2018unreasonable}, CLIP image-text, and adversarial losses with weights $1.0$, $5.0$, $5.0$, and $0.5$. CycleGAN-Turbo independently samples the day and night domains, so filename correspondences are not used during training. It combines cycle L1, cycle LPIPS, identity L1, identity LPIPS, and adversarial losses with weights $1.0$, $10.0$, $1.0$, $1.0$, and $0.5$. Thus, the comparison shares a backbone and adaptation capacity while retaining the objectives required by paired and unpaired learning.
 
-\section{Numerical Experiments}
+\subsection{Data and Training Protocol}
 
-You explain the experiments you have conducted to check your implemented design. You must also specify all values and parameters you have considered in the simulation, plot the learning curves or show the test values in the form of tables. If you have a demo test, you could also present it here. Also, if you compare your implementation against a benchmark or a reference setting, you should explain what the benchmark is and specify how you got the results for the benchmark (it's all OK if you get the result for the benchmark from an already implemented code or copy it from a paper, you should just cite them).
+We use DarkDriving \cite{wang2026darkdriving}, whose raw release contains 5,906 aligned training pairs and 3,632 held-out pairs. Both images in each pair were fully decoded before sampling; six corrupted training pairs and two corrupted test pairs were excluded, leaving 5,900 and 3,630 valid pairs. We reserved 100 training pairs for internal validation and sampled each few-shot split from the remainder using the experiment seed. The 5-shot condition was added post hoc as an exploratory extension to the original 10/20/50-shot grid.
 
-\subsection{Including Figures}
+Every run used AdamW, learning rate $10^{-5}$, batch size 1, resolution $512\times512$, 2,000 optimizer steps, and seed 1, 2, or 3. This fixes the stopping budget but not computation per step or effective epochs. Architecture-specific memory settings were retained: pix2pix-turbo used full precision and four data-loader workers; CycleGAN-Turbo used FP16, gradient checkpointing, and zero workers. All runs used a single NVIDIA RTX 5090. CycleGAN-Turbo checkpoints explicitly include the trainable U-Net \texttt{conv\_in} weights in addition to LoRA and VAE weights.
 
+\subsection{Controlled Evaluation and Breaking Point}
 
-\begin{figure}
+Formal evaluation used one deterministic 200-pair subset sampled from the valid held-out split with seed 42 and reused for every condition. Generation used base seed 0 plus a deterministic filename-derived seed, making outputs independent of traversal order. Manifests enforced identical filenames across runs. We report per-image SSIM \cite{wang2004image}, LPIPS with AlexNet, and CLIP image-image similarity with ViT-B/32 \cite{radford2021learning}; CMMD with kernel $\sigma=1$ measures generated-set distribution alignment \cite{jayasumana2024rethinking}. Higher SSIM and CLIP are better; lower LPIPS and CMMD are better.
+
+For adjacent shot levels $L<H$, a metric-specific breaking point requires: (i) worse mean performance at $L$ under a one-sided, seed-ID-paired $t$-test; (ii) a between-seed variance ratio $\operatorname{Var}(L)/\operatorname{Var}(H)>1$; and, for per-image metrics, (iii) an analogous test-sample variance ratio above 1. Holm correction controls 12 adjacent-shot tests per model (four metrics across three transitions). CMMD is dataset-level, so sample variance is not applicable. With only three seeds, effect sizes and variance ratios remain essential context for the adjusted $p$-values.
+
+\section{Results}
+
+\subsection{Overall Performance}
+
+\begin{table}[h]
+  \caption{Held-out means across three training seeds.}
+  \label{tab:results}
   \centering
-  \fbox{\rule[-.5cm]{0cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
-  \caption{Sample figure caption.}
-\end{figure}
-
-
-
-\subsection{Including Tables}
-
-\begin{table}
-  \caption{Sample table title}
-  \label{sample-table}
-  \centering
-  \begin{tabular}{lll}
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{lccccc}
     \toprule
-    \multicolumn{2}{c}{Part}                   \\
-    \cmidrule(r){1-2}
-    Architecture     & Result 1     & Result 2 \\
+    Model & Shots & SSIM $\uparrow$ & LPIPS $\downarrow$ & CLIP $\uparrow$ & CMMD $\downarrow$ \\
     \midrule
-    CNN & 1\%  &1\%   \\
-    ResNet     &1\% &1\%      \\
-    LSTM     &1\%       &   \\
+    CycleGAN-Turbo & 5  & 0.642 & 0.583 & 0.897 & 0.041 \\
+                   & 10 & 0.676 & 0.543 & 0.917 & 0.018 \\
+                   & 20 & 0.693 & 0.535 & 0.930 & 0.012 \\
+                   & 50 & 0.702 & 0.535 & 0.931 & 0.014 \\
+    \midrule
+    pix2pix-turbo  & 5  & 0.645 & 0.529 & 0.896 & 0.055 \\
+                   & 10 & 0.676 & 0.504 & 0.922 & 0.027 \\
+                   & 20 & 0.717 & 0.495 & 0.929 & 0.025 \\
+                   & 50 & 0.686 & 0.487 & 0.930 & 0.025 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\section{Discussion}
-You may include answer to research questions here.
-	
+Most mean improvements occur between 5 and 20 shots (Table~\ref{tab:results}). Beyond 20 shots, LPIPS, CLIP similarity, and CMMD largely plateau. SSIM is less stable: pix2pix-turbo peaks at 20 shots and declines at 50, while CycleGAN-Turbo continues to improve. Across every shot level, pix2pix-turbo has lower LPIPS and CycleGAN-Turbo has lower CMMD. SSIM and CLIP are broadly comparable at 20--50 shots, so neither model dominates all notions of quality.
 
-\section{Conclusions}
-You should shortly conclude what you learned during project. Also, if you have any idea for further improvement of the results or extension, you may mention it here.
-	
-	
+\subsection{Breaking-Point Analysis}
 
+\begin{table}[h]
+  \caption{Criterion-confirmed breaking points. Variance ratios are seed/sample.}
+  \label{tab:breaking}
+  \centering
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{lcccc}
+    \toprule
+    Model & Evidence & Degradation at 5 shots & Variance ratios & Holm $p$ \\
+    \midrule
+    pix2pix-turbo  & LPIPS & $+0.0254$ & $24.87/1.04\times$ & 0.040 \\
+    CycleGAN-Turbo & SSIM  & $0.0339$ lower & $1.10/1.17\times$ & 0.046 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\section*{References}
-Include all references here. It’s important to have your references cited.
-\medskip
-{
+Both models meet the full criterion at 5 shots, but along different metrics (Table~\ref{tab:breaking}). pix2pix-turbo loses paired-target perceptual fidelity on LPIPS, with particularly large seed-level instability. CycleGAN-Turbo loses structural similarity on SSIM with smaller but elevated seed- and sample-level variance. Separately, CycleGAN-Turbo shows CLIP degradation from 10 to 20 shots ($0.0126$ in the worse direction; seed/sample variance ratios $1.40/1.12\times$). Its raw $p=0.008$ becomes Holm $p=0.083$, so we treat it as a secondary exploratory signal rather than a confirmed breaking point.
+
+\subsection{Qualitative Comparison}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\textwidth]{../results/qualitative_figures/qualitative_slide_compact.png}
+  \caption{Fixed held-out scenes at training seed 1 and filename-stable inference seed 0. Cases were selected by pre-defined typical and breaking-sensitive rules rather than visual preference.}
+  \label{fig:qualitative}
+\end{figure}
+
+Figure~\ref{fig:qualitative} illustrates the metric-dependent behavior. Five-shot outputs show stronger changes in lighting and appearance, while the 10- and 50-shot outputs are generally more stable. pix2pix-turbo tends to remain closer to the paired nighttime target; CycleGAN-Turbo more freely changes global illumination, consistent with the LPIPS/CMMD trade-off. These examples support interpretation but are not a substitute for the fixed 200-image quantitative evaluation.
+
+\section{Discussion and Limitations}
+
+Paired supervision is more sample-efficient when success means similarity to a specific aligned target, as reflected by pix2pix-turbo's lower LPIPS. Unpaired cycle alignment better matches the aggregate nighttime distribution, as reflected by CycleGAN-Turbo's lower CMMD. At 20--50 shots, the models converge on similar SSIM and CLIP values while retaining this fidelity--distribution trade-off. The practical choice should therefore follow the intended criterion rather than a universal model ranking.
+
+Four limitations constrain interpretation. First, three seeds provide limited statistical power; ``confirmed'' refers only to satisfying our pre-specified criterion within this experiment. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Finally, CMMD is distribution-level and has no per-sample variance. Additional seeds, datasets, and training-budget sweeps are needed before treating 5 shots as a general threshold.
+
+\section{Conclusion}
+\enlargethispage{2\baselineskip}
+
+Few-shot robustness is metric-specific. Both models break at 5 shots under our criterion, but pix2pix-turbo does so on LPIPS and CycleGAN-Turbo on SSIM. Most gains arrive by 20 shots; thereafter, LPIPS, CLIP, and CMMD largely plateau while SSIM remains seed-sensitive. Paired pix2pix-turbo favors target fidelity, whereas unpaired CycleGAN-Turbo favors distributional alignment.
+
 \small
+\begin{thebibliography}{10}
 
+\bibitem{parmar2024one}
+Parmar, G., Park, T., Narasimhan, S., \& Zhu, J.-Y. (2024). One-Step Image Translation with Text-to-Image Models. \textit{arXiv:2403.12036}.
 
-[1] Alexander, J.A.\ \& Mozer, M.C.\ (1995) Template-based algorithms for
-connectionist rule extraction. In G.\ Tesauro, D.S.\ Touretzky and T.K.\ Leen
-(eds.), {\it Advances in Neural Information Processing Systems 7},
-pp.\ 609--616. Cambridge, MA: MIT Press.
+\bibitem{isola2017image}
+Isola, P., Zhu, J.-Y., Zhou, T., \& Efros, A. A. (2017). Image-to-Image Translation with Conditional Adversarial Networks. \textit{CVPR}.
 
+\bibitem{zhu2017unpaired}
+Zhu, J.-Y., Park, T., Isola, P., \& Efros, A. A. (2017). Unpaired Image-to-Image Translation using Cycle-Consistent Adversarial Networks. \textit{ICCV}.
 
-[2] Bower, J.M.\ \& Beeman, D.\ (1995) {\it The Book of GENESIS: Exploring
-  Realistic Neural Models with the GEneral NEural SImulation System.}  New York:
-TELOS/Springer--Verlag.
+\bibitem{zhang2018unreasonable}
+Zhang, R., Isola, P., Efros, A. A., Shechtman, E., \& Wang, O. (2018). The Unreasonable Effectiveness of Deep Features as a Perceptual Metric. \textit{CVPR}.
 
+\bibitem{sauer2023adversarial}
+Sauer, A., Lorenz, D., Blattmann, A., \& Rombach, R. (2023). Adversarial Diffusion Distillation. \textit{arXiv:2311.17042}.
 
-[3] Hasselmo, M.E., Schnell, E.\ \& Barkai, E.\ (1995) Dynamics of learning and
-recall at excitatory recurrent synapses and cholinergic modulation in rat
-hippocampal region CA3. {\it Journal of Neuroscience} {\bf 15}(7):5249-5262.
-}
+\bibitem{hu2021lora}
+Hu, E. J., et al. (2021). LoRA: Low-Rank Adaptation of Large Language Models. \textit{ICLR}.
 
-\section*{Appendix}
-Any descriptions about supplementary materials go here.
+\bibitem{wang2026darkdriving}
+Wang, W., et al. (2026). DarkDriving: A Real-World Day and Night Aligned Dataset for Autonomous Driving in the Dark Environment. \textit{arXiv:2603.18067}.
 
+\bibitem{wang2004image}
+Wang, Z., Bovik, A. C., Sheikh, H. R., \& Simoncelli, E. P. (2004). Image Quality Assessment: From Error Visibility to Structural Similarity. \textit{IEEE TIP}.
+
+\bibitem{radford2021learning}
+Radford, A., et al. (2021). Learning Transferable Visual Models From Natural Language Supervision. \textit{ICML}.
+
+\bibitem{jayasumana2024rethinking}
+Jayasumana, S., et al. (2024). Rethinking FID: Towards a Better Evaluation Metric for Image Generation. \textit{CVPR}.
+
+\end{thebibliography}
 
 \end{document}
