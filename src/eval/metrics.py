@@ -2,6 +2,7 @@ from skimage.metrics import structural_similarity as ssim_sk
 from pathlib import Path
 
 import numpy as np
+from PIL import Image
 import torch
 import torch.nn.functional as F
 from torchvision import transforms

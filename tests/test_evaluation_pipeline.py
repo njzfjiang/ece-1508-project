@@ -145,3 +145,26 @@ def test_official_cmmd_kernel_uses_sigma_and_reporting_scale():
 
     expected = 1000.0 * (2.0 - 2.0 * np.exp(-0.01))
     assert np.isclose(value, expected)
+
+
+def test_cmmd_extracts_features_from_image_paths(tmp_path):
+    class FakeClipModel:
+        def encode_image(self, batch):
+            means = batch.mean(dim=(1, 2, 3))
+            return torch.stack((means, torch.ones_like(means)), dim=1)
+
+    path = tmp_path / "sample.png"
+    _write_image(path, 128)
+
+    calculator = CMMDCalculator.__new__(CMMDCalculator)
+    calculator.device = "cpu"
+    calculator.batch_size = 1
+    calculator.clip_model = FakeClipModel()
+    calculator.clip_preprocess = lambda image: torch.from_numpy(
+        np.asarray(image, dtype=np.float32).copy()
+    ).permute(2, 0, 1)
+
+    features = calculator.extract_path_features([path])
+
+    assert features.shape == (1, 2)
+    assert np.isclose(np.linalg.norm(features[0]), 1.0)
