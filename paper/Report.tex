@@ -25,10 +25,10 @@
 \maketitle
 
 \begin{abstract}
-We compare paired and unpaired supervision for few-shot day-to-night driving-scene translation using pix2pix-turbo and CycleGAN-Turbo, two one-step models built on SD-Turbo. We train each model with 5, 10, 20, and 50 examples using three seeds, then evaluate the same 200 held-out pairs with SSIM, LPIPS, CLIP similarity, and CMMD. pix2pix-turbo consistently achieves lower LPIPS, whereas CycleGAN-Turbo consistently achieves lower CMMD, revealing a trade-off between paired-target perceptual fidelity and distributional alignment. Under our pre-specified criterion---significant adjacent-shot mean degradation plus increased between-seed and test-sample variance---both models exhibit a 5-shot breaking point on different metrics: LPIPS for pix2pix-turbo (Holm $p=0.040$) and SSIM for CycleGAN-Turbo (Holm $p=0.046$). CycleGAN-Turbo also shows secondary, exploratory CLIP instability at 10 shots (Holm $p=0.083$). Because each condition has only three seeds, these statistical findings are criterion-confirmed within this experiment but should be interpreted as exploratory beyond it.
+We compare paired and unpaired supervision for few-shot day-to-night driving-scene translation using pix2pix-turbo and CycleGAN-Turbo, two one-step models built on SD-Turbo. We train each model with 5, 10, 20, and 50 examples using three seeds, then evaluate the same 200 held-out pairs with SSIM, LPIPS, CLIP similarity, and official CMMD. pix2pix-turbo consistently achieves lower LPIPS, whereas CycleGAN-Turbo achieves lower CMMD, revealing a trade-off between paired-target perceptual fidelity and distributional alignment. No adjacent-shot candidate survives Holm correction under our pre-specified breaking-point criterion. Unadjusted exploratory screens instead place pix2pix-turbo instability at 5 shots on LPIPS and CLIP similarity, while CycleGAN-Turbo shows CLIP instability at 10 shots and additional LPIPS/CLIP degradation at 5 shots. With only three seeds, these signals should not be interpreted as definitive thresholds.
 \end{abstract}
 
-\section*{Assentation of Teamwork}
+\section*{Statement of Teamwork}
 
 \section{Introduction}
 
@@ -61,15 +61,15 @@ The comparison therefore shares a backbone and adaptation capacity while retaini
 
 \subsection{Data and Training Protocol}
 
-We use DarkDriving \cite{wang2026darkdriving}, whose raw release contains 5,906 aligned training pairs and 3,632 held-out pairs. Both images in each pair were fully decoded before sampling; six corrupted training pairs and two corrupted test pairs were excluded, leaving 5,900 and 3,630 valid pairs. We reserved 100 training pairs for internal validation and sampled each few-shot split from the remainder using the experiment seed. The 5-shot condition was added post hoc as an exploratory extension to the original 10/20/50-shot grid.
+We use DarkDriving \cite{wang2026darkdriving}, whose raw release contains 5,906 aligned training pairs and 3,632 held-out pairs. Both images in each pair were fully decoded before sampling; six corrupted training pairs and two corrupted test pairs were excluded, leaving 5,900 and 3,630 valid pairs. We reserved 100 training pairs for pilot hyperparameter and checkpoint selection, never using the held-out test set for tuning. Few-shot splits were sampled from the remaining pool using the experiment seed and were nested within each seed: $5\subset10\subset20\subset50$. The 5-shot condition was added post hoc as an exploratory extension to the original 10/20/50-shot grid.
 
 Every run used AdamW, learning rate $10^{-5}$, batch size 1, resolution $512\times512$, 2,000 optimizer steps, and seed 1, 2, or 3 on a single NVIDIA RTX 5090. This fixes the stopping budget but not computation per step or effective epochs. Architecture-specific precision and memory settings were retained for stability. CycleGAN-Turbo checkpoints explicitly include the trainable U-Net \texttt{conv\_in} weights in addition to LoRA and VAE weights.
 
 \subsection{Controlled Evaluation and Breaking Point}
 
-Formal evaluation used one deterministic 200-pair subset sampled from the valid held-out split with seed 42 and reused for every condition. Generation used base seed 0 plus a deterministic filename-derived seed, making outputs independent of traversal order. Manifests enforced identical filenames across runs. We report per-image SSIM \cite{wang2004image}, LPIPS with AlexNet, and CLIP image-image similarity with ViT-B/32 \cite{radford2021learning}; CMMD with kernel $\sigma=1$ measures generated-set distribution alignment \cite{jayasumana2024rethinking}. Higher SSIM and CLIP are better; lower LPIPS and CMMD are better.
+Formal evaluation used one deterministic 200-pair subset sampled from the valid held-out split with seed 42 and reused for every condition. Generation used base seed 0 plus a deterministic filename-derived seed, making outputs independent of traversal order. Manifests enforced identical filenames across runs. We report per-image SSIM \cite{wang2004image}, LPIPS with AlexNet, and CLIP image-image similarity with ViT-B/32 \cite{radford2021learning}. Official CMMD uses normalized ViT-L/14@336px image embeddings, a Gaussian kernel with $\sigma=10$, the biased estimator, and the conventional $1000\times$ reporting scale \cite{jayasumana2024rethinking}. Higher SSIM and CLIP are better; lower LPIPS and CMMD are better.
 
-For adjacent shot levels $L<H$, a metric-specific breaking point requires: (i) worse mean performance at $L$ under a one-sided, seed-ID-paired $t$-test; (ii) a between-seed variance ratio $\operatorname{Var}(L)/\operatorname{Var}(H)>1$; and, for per-image metrics, (iii) an analogous test-sample variance ratio above 1. Holm correction controls 12 adjacent-shot tests per model (four metrics across three transitions). CMMD is dataset-level, so sample variance is not applicable. With only three seeds, effect sizes and variance ratios remain essential context for the adjusted $p$-values.
+For adjacent shot levels $L<H$, a metric-specific breaking point requires: (i) worse mean performance at $L$ under a one-sided, seed-ID-paired $t$-test; (ii) a between-seed variance ratio $\operatorname{Var}(L)/\operatorname{Var}(H)>1$; and, for per-image metrics, (iii) an analogous test-sample variance ratio above 1. Holm correction controls 12 adjacent-shot tests per model (four metrics across three transitions); we call a result confirmed only when the adjusted $p<0.05$. CMMD is dataset-level, so sample variance is not applicable. With only three seeds, effect sizes and variance ratios remain essential context.
 
 \section{Results}
 
@@ -82,7 +82,7 @@ For adjacent shot levels $L<H$, a metric-specific breaking point requires: (i) w
   \label{fig:performance}
 \end{figure}
 
-Most mean improvements occur between 5 and 20 shots (Figure~\ref{fig:performance}). Beyond 20 shots, LPIPS, CLIP similarity, and CMMD largely plateau. SSIM is less stable: pix2pix-turbo peaks at 20 shots and declines at 50, while CycleGAN-Turbo continues to improve. Across every shot level, pix2pix-turbo has lower LPIPS and CycleGAN-Turbo has lower CMMD. This follows directly from the supervision objectives: paired reconstruction rewards similarity to a specific nighttime target, whereas independent-domain cycle training rewards matching the nighttime distribution without reproducing that target exactly. SSIM and CLIP are broadly comparable at 20--50 shots, so neither model dominates all notions of quality.
+Most mean improvements occur between 5 and 20 shots (Figure~\ref{fig:performance}). Beyond 20 shots, LPIPS and CLIP similarity largely plateau; CMMD improves modestly for pix2pix-turbo and slightly worsens for CycleGAN-Turbo at 50 shots. SSIM is less stable: pix2pix-turbo peaks at 20 shots and declines at 50, while CycleGAN-Turbo continues to improve. Across every shot level, pix2pix-turbo has lower LPIPS and CycleGAN-Turbo has lower CMMD, although the CMMD gap is negligible at 50 shots. This follows directly from the supervision objectives: paired reconstruction rewards similarity to a specific nighttime target, whereas independent-domain cycle training rewards matching the nighttime distribution without reproducing that target exactly. SSIM and CLIP are broadly comparable at 20--50 shots, so neither model dominates all notions of quality.
 
 \subsection{Breaking-Point Analysis}
 
@@ -94,22 +94,24 @@ Most mean improvements occur between 5 and 20 shots (Figure~\ref{fig:performance
 \end{figure}
 
 \begin{table}[h]
-  \caption{Criterion-confirmed breaking points. Variance ratios are seed/sample.}
+  \caption{Strongest exploratory breaking-point candidates. Variance ratios are seed/sample; none remains significant after Holm correction.}
   \label{tab:breaking}
   \centering
   \small
-  \setlength{\tabcolsep}{5pt}
-  \begin{tabular}{lcccc}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lccccc}
     \toprule
-    Model & Evidence & Degradation at 5 shots & Variance ratios & Holm $p$ \\
+    Model & Comparison & Evidence & Degradation & Variance ratios & Raw / Holm $p$ \\
     \midrule
-    pix2pix-turbo  & LPIPS & $+0.0254$ & $24.87/1.04\times$ & 0.040 \\
-    CycleGAN-Turbo & SSIM  & $0.0339$ lower & $1.10/1.17\times$ & 0.046 \\
+    pix2pix-turbo  & 5 vs 10  & CLIP  & $0.0293$ lower & $5.81/1.41\times$ & .016 / .177 \\
+    pix2pix-turbo  & 5 vs 10  & LPIPS & $+0.0258$ & $88.15/1.28\times$ & .032 / .322 \\
+    CycleGAN-Turbo & 10 vs 20 & CLIP  & $0.0122$ lower & $42.16/1.25\times$ & .004 / .051 \\
+    CycleGAN-Turbo & 5 vs 10  & LPIPS & $+0.0429$ & $9.38/1.53\times$ & .007 / .075 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Both models meet the full criterion at 5 shots, but along different metrics (Table~\ref{tab:breaking}). pix2pix-turbo loses paired-target perceptual fidelity on LPIPS, with particularly large seed-level instability. CycleGAN-Turbo loses structural similarity on SSIM with smaller but elevated seed- and sample-level variance. Separately, CycleGAN-Turbo shows CLIP degradation from 10 to 20 shots ($0.0126$ in the worse direction; seed/sample variance ratios $1.40/1.12\times$). Its raw $p=0.008$ becomes Holm $p=0.083$, so we treat it as a secondary exploratory signal rather than a confirmed breaking point.
+No transition meets the Holm-confirmed criterion (Table~\ref{tab:breaking}). Before multiplicity correction, pix2pix-turbo shows 5-shot degradation on LPIPS and CLIP similarity, each with increased seed and sample variance. CycleGAN-Turbo shows CLIP degradation from 10 to 20 shots---the earliest instability encountered as supervision is reduced---plus LPIPS and CLIP degradation from 5 to 10 shots. The 10-shot CLIP candidate is closest to confirmation (Holm $p=0.0507$), but remains exploratory. CycleGAN-Turbo's 5-shot SSIM mean also degrades (raw $p=0.0049$), yet its sample variance ratio is $0.98$, so it fails the complete criterion.
 
 \subsection{Qualitative Comparison}
 
@@ -120,18 +122,18 @@ Both models meet the full criterion at 5 shots, but along different metrics (Tab
   \label{fig:qualitative}
 \end{figure}
 
-Figure~\ref{fig:qualitative} illustrates the metric-dependent behavior. Five-shot outputs show stronger changes in lighting and appearance, while the 10- and 50-shot outputs are generally more stable. pix2pix-turbo tends to remain closer to the paired nighttime target; CycleGAN-Turbo more freely changes global illumination, consistent with the LPIPS/CMMD trade-off. These examples support interpretation but are not a substitute for the fixed 200-image quantitative evaluation.
+Figure~\ref{fig:qualitative} illustrates the metric-dependent behavior. Five-shot outputs show stronger changes in lighting and appearance, while the 10- and 50-shot outputs are generally more stable. pix2pix-turbo tends to remain closer to the paired nighttime target; CycleGAN-Turbo more freely changes global illumination, consistent with the LPIPS/CMMD trade-off. Cases were selected only after fixing the quantitative rules: typical is nearest the median aggregate per-image difficulty, and breaking-sensitive maximizes the pre-specified low-shot degradations. CMMD is excluded because it has no per-image value. These examples support interpretation but are not a substitute for the fixed 200-image quantitative evaluation.
 
 \newpage
 \section{Discussion and Limitations}
 
-Paired supervision is more sample-efficient when success means similarity to a specific aligned target, as reflected by pix2pix-turbo's lower LPIPS. Unpaired cycle alignment better matches the aggregate nighttime distribution, as reflected by CycleGAN-Turbo's lower CMMD. At 20--50 shots, the models converge on similar SSIM and CLIP values while retaining this fidelity--distribution trade-off. The practical choice should therefore follow the intended criterion rather than a universal model ranking.
+Paired supervision is more sample-efficient when success means similarity to a specific aligned target, as reflected by pix2pix-turbo's lower LPIPS. Unpaired cycle alignment better matches the aggregate nighttime distribution, as reflected by CycleGAN-Turbo's lower CMMD. At 20--50 shots, the models converge on similar SSIM and CLIP values while retaining this fidelity--distribution trade-off. The practical choice should therefore follow the intended criterion rather than a universal model ranking. The absence of a Holm-confirmed threshold is itself informative: the observed low-shot changes are metric-specific and too uncertain to support a single universal breaking point.
 
-Four limitations constrain interpretation. First, three seeds provide limited statistical power; ``confirmed'' refers only to satisfying our pre-specified criterion within this experiment. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Finally, CMMD is distribution-level and has no per-sample variance. Additional seeds, datasets, and training-budget sweeps are needed before treating 5 shots as a general threshold.
+Four limitations constrain interpretation. First, three seeds provide limited statistical power, so even the near-threshold Holm result is uncertain. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Finally, CMMD is distribution-level and has no per-sample variance. Additional seeds, datasets, and training-budget sweeps are needed before assigning a general breaking threshold.
 
 \section{Conclusion}
 
-Few-shot robustness is metric-specific. Both models break at 5 shots under our criterion, but pix2pix-turbo does so on LPIPS and CycleGAN-Turbo on SSIM. Most gains arrive by 20 shots; thereafter, LPIPS, CLIP, and CMMD largely plateau while SSIM remains seed-sensitive. Paired pix2pix-turbo favors target fidelity, whereas unpaired CycleGAN-Turbo favors distributional alignment.
+Few-shot robustness is metric-specific, and no adjacent-shot transition is Holm-confirmed as a breaking point. Unadjusted evidence suggests pix2pix-turbo becomes unstable at 5 shots, while CycleGAN-Turbo may show earlier CLIP instability at 10 shots. Most gains arrive by 20 shots; thereafter, LPIPS and CLIP largely plateau while SSIM and CMMD remain model- and seed-sensitive. Paired pix2pix-turbo favors target fidelity, whereas unpaired CycleGAN-Turbo favors distributional alignment.
 
 \clearpage
 \small
@@ -224,23 +226,23 @@ The source and target prompts were fixed as ``a driving scene during the day'' a
 \label{app:means}
 
 \begin{table}[h]
-  \caption{Held-out means across three training seeds.}
+  \caption{Held-out mean $\pm$ sample standard deviation across three training seeds.}
   \centering
-  \small
-  \setlength{\tabcolsep}{5pt}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
   \begin{tabular}{lccccc}
     \toprule
     Model & Shots & SSIM $\uparrow$ & LPIPS $\downarrow$ & CLIP $\uparrow$ & CMMD $\downarrow$ \\
     \midrule
-    CycleGAN-Turbo & 5  & 0.642 & 0.583 & 0.897 & 0.041 \\
-                   & 10 & 0.676 & 0.543 & 0.917 & 0.018 \\
-                   & 20 & 0.693 & 0.535 & 0.930 & 0.012 \\
-                   & 50 & 0.702 & 0.535 & 0.931 & 0.014 \\
+    CycleGAN-Turbo & 5  & $0.6309\pm0.0175$ & $0.5896\pm0.0135$ & $0.8993\pm0.0062$ & $1.7325\pm0.1044$ \\
+                   & 10 & $0.6676\pm0.0146$ & $0.5467\pm0.0044$ & $0.9181\pm0.0022$ & $1.3760\pm0.0438$ \\
+                   & 20 & $0.6835\pm0.0039$ & $0.5400\pm0.0170$ & $0.9303\pm0.0003$ & $1.0134\pm0.0477$ \\
+                   & 50 & $0.6913\pm0.0216$ & $0.5403\pm0.0107$ & $0.9300\pm0.0030$ & $1.1192\pm0.0825$ \\
     \midrule
-    pix2pix-turbo  & 5  & 0.645 & 0.529 & 0.896 & 0.055 \\
-                   & 10 & 0.676 & 0.504 & 0.922 & 0.027 \\
-                   & 20 & 0.717 & 0.495 & 0.929 & 0.025 \\
-                   & 50 & 0.686 & 0.487 & 0.930 & 0.025 \\
+    pix2pix-turbo  & 5  & $0.6194\pm0.0521$ & $0.5337\pm0.0128$ & $0.8922\pm0.0146$ & $2.2759\pm0.1520$ \\
+                   & 10 & $0.6638\pm0.0486$ & $0.5079\pm0.0014$ & $0.9215\pm0.0061$ & $1.4699\pm0.2110$ \\
+                   & 20 & $0.7058\pm0.0041$ & $0.4993\pm0.0076$ & $0.9297\pm0.0034$ & $1.2408\pm0.0864$ \\
+                   & 50 & $0.6755\pm0.0529$ & $0.4911\pm0.0080$ & $0.9311\pm0.0044$ & $1.1238\pm0.2571$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -266,5 +268,7 @@ After integrity filtering, each training split was sampled from the same valid p
   \item perform seed-ID-paired adjacent-shot tests and Holm correction within each model; and
   \item use per-image variance only as a grouped, within-seed diagnostic rather than treating repeated images as independent training runs.
 \end{enumerate}
+
+Qualitative cases were selected from the same 200 filenames without inspecting the images. Define aggregate difficulty as standardized LPIPS minus standardized SSIM and CLIP similarity. The typical case is closest to its median, the challenging case is closest to its 90th percentile, and the breaking-sensitive case maximizes the combined pre-specified pix2pix-turbo 5-to-10 LPIPS and CycleGAN-Turbo 10-to-20 CLIP degradations while favoring seed-consistent changes.
 
 \end{document}

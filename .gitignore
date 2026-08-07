@@ -64,8 +64,11 @@ Desktop.ini
 # Data and results
 data/raw/
 data/processed/
+data/.cache/
+data/*.zip
 results/
 outputs/
+output/
 artifacts/
 *.log
 

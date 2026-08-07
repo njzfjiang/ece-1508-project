@@ -1,4 +1,13 @@
 {
+  "evaluation": {
+    "version": "official_cmmd",
+    "expected_runs": 24,
+    "test_samples_per_run": 200,
+    "clip_similarity_model": "ViT-B/32",
+    "cmmd_clip_model": "ViT-L/14@336px",
+    "cmmd_sigma": 10.0,
+    "cmmd_scale": 1000.0
+  },
   "checkpoints": {
     "url": "https://huggingface.co/buckets/CMei032/full_grid_5090_artifacts/resolve/outputs.zip?download=true",
     "sha256": "AC9C8B9EDACE3DD2B140E4D279CD73954D05A9D6C174E2D70DA94FB336C578B5",
@@ -6,7 +15,7 @@
     "checkpoint_step": 2000
   },
   "full_results": {
-    "url": "https://huggingface.co/buckets/CMei032/full_grid_5090_artifacts/resolve/full_grid_5090_artifacts.tar?download=true",
+    "url": "https://huggingface.co/buckets/CMei032/full_grid_5090_artifacts/resolve/full_grid_results.zip?download=true",
     "sha256": "018FB669EFB60720FAC104F2E745B88C3CCBA9E51C3C27BAD60F941B9154E077",
     "test_samples": 200
   }

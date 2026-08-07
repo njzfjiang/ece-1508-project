@@ -26,7 +26,7 @@ METRICS = {
     "ssim": ("SSIM", True),
     "lpips": ("LPIPS", False),
     "clip_similarity": ("CLIP similarity", True),
-    "cmmd": ("CMMD", False),
+    "cmmd": (r"CMMD ($\sigma=10$)", False),
 }
 
 

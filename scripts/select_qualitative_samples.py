@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--metrics-root",
         type=Path,
-        default=Path("results/full_grid_5090/evaluation"),
+        default=Path("results/full_grid_official_cmmd/evaluation"),
     )
     parser.add_argument(
         "--output-dir",
