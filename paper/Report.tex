@@ -35,15 +35,23 @@ The success of this report relies on the joint effort of all team members. Yuxin
 
 Day-to-night translation can expand driving data across illumination conditions, but paired examples are costly to collect. Paired methods can directly imitate a target transformation, while unpaired methods trade correspondence for domain-level supervision. This distinction is especially consequential when only a handful of images are available.
 
-pix2pix learns conditional translation from aligned pairs \cite{isola2017image}; CycleGAN instead uses adversarial and cycle-consistency objectives on independently sampled domains \cite{zhu2017unpaired}. img2img-turbo adapts these paradigms to one-step diffusion, providing pix2pix-turbo and CycleGAN-Turbo variants with a shared SD-Turbo backbone \cite{parmar2024one}. Their few-shot robustness, however, is not well characterized.
-
 We ask: (1) which supervision paradigm learns day-to-night translation more effectively at 5--50 shots, and (2) at which shot level does performance become statistically unstable? We contribute a controlled $2$-model $\times$ $4$-shot $\times$ $3$-seed comparison, a fixed held-out evaluation protocol, and an explicit breaking-point analysis that separates mean degradation from seed- and sample-level variability.
+
+\section{Related Work and Model Architecture}
+
+Classical pix2pix learns a conditional generator from aligned input--target pairs using a conditional discriminator and direct reconstruction loss \cite{isola2017image}. CycleGAN removes the pairing requirement by learning mappings in both directions with domain discriminators and cycle consistency; identity loss further discourages unnecessary changes to samples already in the target domain \cite{zhu2017unpaired}. These methods motivate the paired and unpaired objectives studied here, but their original convolutional generators do not exploit a pretrained text-to-image prior.
+
+img2img-turbo instead adapts the distilled SD-Turbo model into an end-to-end, one-step image translator \cite{parmar2024one,sauer2023adversarial}. An input image is encoded by the VAE, its latent replaces the usual initial diffusion noise, and a text-conditioned U-Net makes one prediction at the terminal diffusion timestep before the VAE decoder reconstructs the output. LoRA adapters provide parameter-efficient updates \cite{hu2021lora}; trainable zero-convolution skip paths carry multi-scale encoder activations directly to the decoder to preserve spatial detail, and the U-Net input convolution is also adapted. The pretrained text encoder and most backbone weights remain frozen.
+
+pix2pix-turbo applies this generator once from day to night. Its released training objective combines paired pixel and LPIPS reconstruction, generated-image--target-text CLIP alignment, and a vision-aided adversarial loss on real versus generated target-domain images. CycleGAN-Turbo applies the same shared one-step U-Net in both directions, selected by day/night text embeddings, while using direction-specific VAE adaptation paths. Two discriminators enforce day and night realism; $x\!\rightarrow\!\hat y\!\rightarrow\!x_{\mathrm{rec}}$ and $y\!\rightarrow\!\hat x\!\rightarrow\!y_{\mathrm{rec}}$ receive L1 and LPIPS cycle losses, and identity passes receive analogous penalties. Thus, CycleGAN-Turbo does not use aligned day/night targets even when such filenames exist.
+
+The released pix2pix-turbo interface also supports stochastic generation by interpolating the encoded input with an external noise map and scaling adapters with a parameter $r$; CycleGAN-Turbo exposes no analogous interpolation control, although both implementations sample a VAE posterior latent. We did not tune these diversity controls. Formal evaluation used the pix2pix default deterministic branch, a fixed prompt, and a deterministic per-filename RNG seed for both models. Each score therefore represents one reproducible output per checkpoint and input; our reported variability concerns training seeds and test samples, not repeated-generation diversity from a fixed checkpoint.
 
 \section{Methods}
 
 \subsection{Models and Objectives}
 
-Both models initialize from SD-Turbo \cite{sauer2023adversarial} and use parameter-efficient adaptation \cite{hu2021lora} with U-Net LoRA rank 32 and VAE rank 4. pix2pix-turbo receives aligned day/night pairs and optimizes reconstruction, perceptual \cite{zhang2018unreasonable}, text-alignment, and adversarial terms. CycleGAN-Turbo independently samples the two domains, so filename correspondences are not used during training; it optimizes cycle, identity, perceptual, and adversarial terms. Their objectives can be summarized as
+Our implementation retains the architecture and losses above but matches adaptation capacity across models. The released training code defaults to U-Net LoRA rank 8 for pix2pix-turbo and 128 for CycleGAN-Turbo, VAE rank 4, learning rate $5\times10^{-6}$, and batch size 4. We instead use U-Net/VAE ranks 32/4 for both models, learning rate $10^{-5}$, batch size 1, and a fixed 2,000-step budget selected through held-out pilot experiments. Their objectives can be summarized as
 \begin{align}
 \mathcal{L}_{\mathrm{pix}}
   &= \lambda_{2}\mathcal{L}_{2}
@@ -78,21 +86,7 @@ For adjacent shot levels $L<H$, a metric-specific breaking point requires: (i) w
 
 Most mean improvements occur between 5 and 20 shots (Figure~\ref{fig:performance}). Beyond 20 shots, LPIPS and CLIP similarity largely plateau; CMMD improves modestly for pix2pix-turbo and slightly worsens for CycleGAN-Turbo at 50 shots. SSIM is less stable: pix2pix-turbo peaks at 20 shots and declines at 50, while CycleGAN-Turbo continues to improve. Across every shot level, pix2pix-turbo has lower LPIPS and CycleGAN-Turbo has lower CMMD, although the CMMD gap is negligible at 50 shots. This pattern is consistent with the supervision objectives: paired reconstruction rewards similarity to a specific nighttime target, whereas independent-domain cycle training rewards matching the nighttime distribution without reproducing that target exactly. SSIM and CLIP are broadly comparable at 20--50 shots, so neither model dominates all notions of quality.
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.94\textwidth]{figures/performance_by_shot.png}
-  \caption{Held-out performance across shot levels. Large markers show means and bars show one standard deviation across three seeds; faint points show individual seeds. Exact means appear in Appendix~\ref{app:means}.}
-  \label{fig:performance}
-\end{figure}
-
 \subsection{Breaking-Point Analysis}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\textwidth]{figures/instability_by_shot.png}
-  \caption{Between-seed variance ratios for adjacent shot levels. The dashed line marks equal variance. Stars identify raw-significant mean degradation with increased seed variance; formal confirmation additionally requires increased test-sample variance and Holm-adjusted significance.}
-  \label{fig:instability}
-\end{figure}
 
 \begin{table}[h]
   \caption{Strongest exploratory breaking-point candidates. Variance ratios are seed/sample; none remains significant after Holm correction.}
@@ -116,25 +110,38 @@ No transition meets the Holm-confirmed criterion (Table~\ref{tab:breaking}). Bef
 
 \subsection{Qualitative Comparison}
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=\textwidth]{../results/qualitative_figures/qualitative_slide_compact.png}
-  \caption{Fixed held-out scenes at training seed 1 and filename-stable inference seed 0. Cases were selected by pre-defined typical and breaking-sensitive rules rather than visual preference.}
-  \label{fig:qualitative}
-\end{figure}
+Figure~\ref{fig:qualitative} illustrates the metric-dependent behavior. Five-shot outputs show stronger changes in lighting and appearance, while the 10- and 50-shot outputs are generally more stable. pix2pix-turbo tends to remain closer to the paired nighttime target; CycleGAN-Turbo more freely changes global illumination, consistent with the LPIPS/CMMD trade-off. After quantitative analysis, typical was selected nearest the median aggregate per-image difficulty and breaking-sensitive to maximize the selected low-shot degradations. CMMD was excluded because it has no per-image value. These post-hoc examples illustrate, but do not independently validate, the fixed 200-image quantitative results.
 
-Figure~\ref{fig:qualitative} illustrates the metric-dependent behavior. Five-shot outputs show stronger changes in lighting and appearance, while the 10- and 50-shot outputs are generally more stable. pix2pix-turbo tends to remain closer to the paired nighttime target; CycleGAN-Turbo more freely changes global illumination, consistent with the LPIPS/CMMD trade-off. Cases were selected only after fixing the quantitative rules: typical is nearest the median aggregate per-image difficulty, and breaking-sensitive maximizes the pre-specified low-shot degradations. CMMD is excluded because it has no per-image value. These examples support interpretation but are not a substitute for the fixed 200-image quantitative evaluation.
-
-\newpage
 \section{Discussion and Limitations}
 
 In this comparison, pix2pix-turbo achieves better paired-target fidelity, as reflected by lower LPIPS, whereas CycleGAN-Turbo achieves better distributional alignment under our distribution-level metric. Because the models differ in their objectives and some implementation settings, these differences should not be attributed to supervision alone. At 20--50 shots, the models converge on similar SSIM and CLIP values while retaining this fidelity--distribution trade-off. The practical choice should therefore follow the intended criterion rather than a universal model ranking. The absence of a Holm-confirmed threshold is itself informative: the observed low-shot changes are metric-specific and too uncertain to support a single universal breaking point.
 
-Five limitations constrain interpretation. First, three seeds provide limited statistical power, so even the near-threshold Holm result is uncertain. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Fourth, CMMD is distribution-level and has no per-sample variance. Finally, one model represents each supervision regime, so model-specific architectural and objective differences are confounded with the paired-versus-unpaired comparison. Additional seeds, datasets, and training-budget sweeps are needed before assigning a general breaking threshold. 
+Six limitations constrain interpretation. First, three seeds provide limited statistical power, so even the near-threshold Holm result is uncertain. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Fourth, CMMD is distribution-level and has no per-sample variance. Fifth, one seeded output per input does not measure inference-time output diversity. Finally, one model represents each supervision regime, so model-specific architectural and objective differences are confounded with the paired-versus-unpaired comparison. Additional seeds, datasets, repeated-generation sweeps, and training-budget sweeps are needed before assigning a general breaking threshold. 
 
 \section{Conclusion}
 
 Few-shot robustness is metric-specific, and no adjacent-shot transition is Holm-confirmed as a breaking point. Unadjusted evidence suggests pix2pix-turbo becomes unstable at 5 shots, while CycleGAN-Turbo may show earlier CLIP instability at 10 shots. Most gains arrive by 20 shots; thereafter, LPIPS and CLIP largely plateau while SSIM and CMMD remain model- and seed-sensitive. Paired pix2pix-turbo favors target fidelity, whereas unpaired CycleGAN-Turbo favors distributional alignment.
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=0.68\textwidth]{figures/performance_by_shot.png}
+  \caption{Held-out performance across shot levels. Large markers show means and bars show one standard deviation across three seeds; faint points show individual seeds. Exact means appear in Appendix~\ref{app:means}.}
+  \label{fig:performance}
+\end{figure}
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=0.68\textwidth]{figures/instability_by_shot.png}
+  \caption{Between-seed variance ratios for adjacent shot levels. The dashed line marks equal variance. Stars identify raw-significant mean degradation with increased seed variance; formal confirmation additionally requires increased test-sample variance and Holm-adjusted significance.}
+  \label{fig:instability}
+\end{figure}
+
+\begin{figure}[p]
+  \centering
+  \includegraphics[width=0.98\textwidth]{../results/qualitative_figures/qualitative_slide_compact.png}
+  \caption{Fixed held-out scenes at training seed 1 and filename-stable inference seed 0. Cases were selected post hoc using quantitative rules rather than visual preference.}
+  \label{fig:qualitative}
+\end{figure}
 
 \clearpage
 \small
@@ -254,7 +261,7 @@ The source and target prompts were fixed as ``a driving scene during the day'' a
 \begin{figure}[h]
   \centering
   \includegraphics[width=\textwidth]{../results/qualitative_figures/qualitative_all_cases.png}
-  \caption{Expanded qualitative comparison including the pre-defined typical, challenging, and breaking-sensitive cases. Conditions use training seed 1 and identical filenames with inference seed 0.}
+  \caption{Expanded qualitative comparison including post-hoc typical, challenging, and breaking-sensitive cases selected by quantitative rules. Conditions use training seed 1 and identical filenames with inference seed 0.}
   \label{fig:qualitative-full}
 \end{figure}
 
