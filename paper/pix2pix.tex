@@ -1,0 +1,167 @@
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usetikzlibrary{positioning, arrows.meta, shapes, fit, backgrounds, calc}
+
+\begin{document}
+
+\begin{tikzpicture}[
+    % Component styles
+    box/.style={
+        rectangle,
+        draw,
+        rounded corners=3pt,
+        minimum width=3.5cm,
+        minimum height=1.0cm,
+        align=center,
+        font=\small\bfseries,
+        fill=blue!8
+    },
+    lossbox/.style={
+        rectangle,
+        draw,
+        rounded corners=3pt,
+        minimum width=2.5cm,
+        minimum height=0.8cm,
+        align=center,
+        font=\small\bfseries,
+        fill=red!15
+    },
+    arrow/.style={
+        -{Stealth[length=3mm, width=2mm]},
+        thick,
+        draw=black!70
+    },
+    arrowloss/.style={
+        -{Stealth[length=3mm, width=2mm]},
+        thick,
+        draw=red!70,
+        dashed
+    },
+    arrowskip/.style={
+        -{Stealth[length=3mm, width=2mm]},
+        thick,
+        dotted,
+        draw=blue
+    },
+]
+
+% ============================================================
+% TITLE
+% ============================================================
+\node[font=\Large\bfseries] at (1,19.5) {Pix2Pix\_Turbo Architecture};
+
+% ============================================================
+% INPUTS
+% ============================================================
+\node[box, fill=gray!15, minimum width=2.8cm] (input_cond_text) 
+    at (6.5,17.7) {Conditioning Text Prompt\\\normalfont\small ``a driving scene during the night”''};
+
+\node[box, fill=gray!15, minimum width=2.8cm] (input_image) 
+    at (-1.5,17.7) {\includegraphics[width=1.5cm]{img/pix2pix_x.png}\\Source Image\\\normalfont\small};
+    
+\node[box, fill=gray!15, minimum width=2.8cm] (input_real) 
+    at (6.5,-2.9) {\includegraphics[width=1.5cm]{img/pix2pix_y.png}\\Target Image\\\normalfont\small};
+
+\node[box, fill=purple!10, minimum width=3.5cm] (clip_enc) 
+    at (6.5,14.8) {CLIP Text Encoder\\\normalfont\small 23-layer Transformer};
+
+\begin{scope}
+    \draw[dashed, rounded corners=5pt, thick, fill=orange!3] 
+        (-7.5,-1.0) rectangle (4.5,13.5);
+    \node[font=\bfseries, text=orange!60] (generator) at (-6.2,13.0) {Generator};
+
+    % ============================================================
+    % ENCODERS
+    % ============================================================
+    \node[box, fill=orange!10, minimum width=3.5cm] (vae_enc) 
+        at (-1.5,14.8) {VAE Encoder \\(LoRA-Adapted)};
+
+    \node[box, fill=orange!10, minimum width=3.5cm] (vae_dec) 
+        at (-1.5,0.0) {VAE Decoder \\(LoRA-Adapted)};
+
+    % ============================================================
+    % U-NET
+    % ============================================================
+    \begin{scope}
+        \draw[dashed, rounded corners=5pt, thick, fill=red!3] 
+            (-6.5,1.0) rectangle (3.5,12.5);
+        \node[font=\bfseries, text=red!60] (unet) at (-1.5,12.0) {U-Net (LoRA-Adapted)};
+
+        % Input Layers
+        \node[box, fill=blue!8, minimum width=5.0cm, minimum height=1.2cm] (init) 
+        at (-1.5,10.8) {Initial Layers\\\normalfont\small 
+        \begin{tabular}{c}
+        Conv2d(4 $\rightarrow$ 320) \texttt{(conv\_in)} \\
+        TimestepEmbedding \texttt{(time\_proj + time\_embedding)}
+        \end{tabular}};
+
+        % Down Blocks
+        \node[box, fill=red!5, minimum width=4.5cm, minimum height=0.9cm] (down1) 
+            at (-1.5,9.2) {CrossAttnDownBlock2D $\times$3\\\normalfont\small 320 $\rightarrow$ 640 $\rightarrow$ 1280 ch};
+
+        \node[box, fill=red!5, minimum width=4.5cm, minimum height=0.9cm] (down2) 
+            at (-1.5,7.7) {DownBlock2D $\times$1\\\normalfont\small 1280 ch};
+
+        % Mid Block
+        \node[box, fill=red!10, minimum width=5.0cm, minimum height=0.9cm] (mid) 
+            at (-1.5,6.2) {UNetMidBlock2DCrossAttn\\\normalfont\small 1280 ch $\cdot$ Transformer $\times$1 + ResNet $\times$2};
+
+        % Up Blocks
+        \node[box, fill=red!5, minimum width=4.5cm, minimum height=0.9cm] (up1) 
+            at (-1.5,4.7) {UpBlock2D $\times$1\\\normalfont\small 1280 $\rightarrow$ 1280 ch};
+
+        \node[box, fill=red!5, minimum width=4.5cm, minimum height=0.9cm] (up2) 
+            at (-1.5,3.2) {CrossAttnUpBlock2D $\times$3\\\normalfont\small 1280 $\rightarrow$ 640 $\rightarrow$ 320 ch};
+
+        \node[box, fill=yellow!10, minimum width=4.5cm, minimum height=0.9cm] (outlayer) 
+            at (-1.5,1.7) {Output Layers\\\normalfont\small GroupNorm(32,320) $\rightarrow$ SiLU $\rightarrow$ Conv2d(320$\rightarrow$4)};
+    \end{scope}
+        
+\end{scope}
+
+% ============================================================
+% GENERATED IMAGE
+% ============================================================
+\node[box, fill=gray!15, minimum width=2.8cm] (gen_image) 
+    at (-1.5,-2.9) {\includegraphics[width=1.5cm]{img/pix2pix_fake_y.png}\\Generated Image\\};
+
+% ============================================================
+% DISCRIMINATOR
+% ============================================================
+\node[box, fill=green!10, minimum width=3.5cm] (discriminator) 
+    at (2.5,-5.5) {Discriminator\\\normalfont\small PatchGAN};
+
+
+% ============================================================
+% ARROWS
+% ============================================================
+% Text path
+\draw[arrow] (input_cond_text.south) -- (clip_enc.north);
+\draw[arrow] (clip_enc.south) |- 
+    node[font=\scriptsize, fill=white, inner sep=2pt, pos=0.3] {context} (down1.east);
+
+% Image path
+\draw[arrow] (input_image.south) -- (vae_enc.north);
+\draw[arrow] (vae_enc.south) -- 
+    node[font=\scriptsize, pos=0.3, fill=white, inner sep=2pt] {latent} (unet.north);
+
+% U-Net forward flow
+\draw[arrow] (init.south) -- (down1.north);
+\draw[arrow] (down1.south) -- (down2.north);
+\draw[arrow] (down2.south) -- (mid.north);
+\draw[arrow] (mid.south) -- (up1.north);
+\draw[arrow] (up1.south) -- (up2.north);
+\draw[arrow] (up2.south) -- (outlayer.north);
+
+% Skip connections
+\draw[arrowskip] (vae_enc.east) |- ++(3.5,0) |- node[font=\scriptsize, pos=0.3, fill=blue!10, inner sep=2pt] {skip connection} (vae_dec.east);
+
+% Output path
+\draw[arrow] (outlayer.south) -- (vae_dec.north);
+\draw[arrow] (vae_dec.south) -- (gen_image.north);
+\draw[arrow] (gen_image.south) |- node[font=\scriptsize, left] {generated} (discriminator.west);
+\draw[arrow] (input_real.south) |- node[font=\scriptsize, right] {real} (discriminator.east);
+
+\end{tikzpicture}
+\end{document}
