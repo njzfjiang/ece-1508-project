@@ -30,3 +30,6 @@ def test_compare_generation_seeds_detects_exact_and_changed_outputs(tmp_path):
     assert summary["exactly_identical_images"] == 1
     assert summary["exactly_identical_fraction"] == 0.5
     assert summary["pairwise_pixel_mae_mean"] > 0
+    assert summary["pairwise_pixel_mae_mean_8bit"] > 0
+    assert summary["pairwise_psnr_mean_db"] is not None
+    assert 0 < summary["unchanged_channel_fraction"] < 1
