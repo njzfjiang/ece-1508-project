@@ -1,9 +1,10 @@
 # ece-1508-project
 
 Few-shot day-to-night image translation on the DarkDriving dataset. This
-project compares CycleGAN-Turbo and SD-Turbo+LoRA under 10-, 20-, and
-50-shot settings to study how unpaired cycle-consistent learning and paired
-supervision behave under limited data.
+project compares paired pix2pix-Turbo and unpaired CycleGAN-Turbo, both adapted
+from SD-Turbo, under 5-, 10-, 20-, and 50-shot settings. The 10/20/50-shot grid
+is the original comparison; 5-shot is a post-hoc exploratory extension used to
+probe the low-data breaking point.
 
 ## Project Layout
 
@@ -13,37 +14,24 @@ supervision behave under limited data.
 - `external/`: vendored `img2img-turbo` source
 - `notebooks/`: analysis of the experiment, including EDA and smoke-test notebooks
 - `outputs/`: training checkpoints and related artifacts
+- `paper/`: report source and generated figures
 - `results/`: generated samples and evaluation outputs
 - `scripts/`: top-level experiment and utility entrypoints
 - `src/`: training and evaluation code
 
 ## Setup
 
-### DarkDriving Dataset (ICRA 2026)
-
-**Manual Download Steps:**
-
-1. Go to the official repository: https://github.com/DriveMindLab/DarkDriving-ICRA-2026
-2. Download **DarkDriving_lle** from the [OneDrive link](https://onedrive.live.com/?id=64492CF1FC56CDDE%21s07d39562e06943cbb357c24a9708a0cb&cid=64492CF1FC56CDDE&redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvYy82NDQ5MmNmMWZjNTZjZGRlL0lnQmlsZE1IYWVETFE3Tlh3a3FYQ0tETEFiVnJrN3N5RjBsaElJdTNQU1ZKVVBVP2U9c01KUDJU) provided in the README
-3. Extract the archive to `data/raw/`:
-   ```bash
-   # After downloading darkdriving_lle.zip
-   unzip darkdriving_lle.zip -d data/raw/
-   ```
-
-**Auto Download:**
-Run below code to download the processed data
-```
-bash scripts/download_dark_driving.sh
-```
+### Environment
 
 The baseline environment uses Python 3.10 and CUDA 11.8 on Ampere GPUs.
 
 ```bash
 conda env create -f environment.yaml
 conda activate ece-1508
-python scripts/setup.py
 ```
+
+`environment.yaml` already installs `requirements.txt`; pass `--skip-install`
+when running setup afterward to avoid installing the same packages twice.
 
 For RTX 5090 / Blackwell machines, use the separately pinned CUDA 12.8 profile.
 It intentionally disables xFormers and writes formal artifacts under isolated
@@ -52,7 +40,6 @@ It intentionally disables xFormers and writes formal artifacts under isolated
 ```bash
 conda env create -f environment-5090.yaml
 conda activate ece-1508-5090
-python scripts/setup.py --skip-install --skip-prepare
 
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.get_device_name(0))"
 ```
@@ -69,17 +56,54 @@ python scripts/setup.py \
 Do not install `requirements.txt` into the 5090 environment: it pins PyTorch
 2.0.1/CUDA 11.8 and xFormers 0.0.20.
 
+### Dataset and vendor setup
+
+Choose one data route below.
+
+#### Route A: download the prepared snapshot
+
+This route does not require the raw dataset:
+
+```bash
+bash scripts/download_dark_driving.sh
+python scripts/setup.py --skip-install --skip-prepare
+```
+
+The download script installs `data/processed/`; setup then prepares the pinned
+vendor tree without looking for `data/raw/`. The prepared archive may contain
+only the original 10/20/50-shot grid; if `data/processed/5shot/` is absent,
+derive the nested 5-shot extension with the command in the Data section below.
+
+#### Route B: rebuild from DarkDriving (ICRA 2026)
+
+**Manual Download Steps:**
+
+1. Go to the official repository: https://github.com/DriveMindLab/DarkDriving-ICRA-2026
+2. Download **DarkDriving_lle** from the [OneDrive link](https://onedrive.live.com/?id=64492CF1FC56CDDE%21s07d39562e06943cbb357c24a9708a0cb&cid=64492CF1FC56CDDE&redeem=aHR0cHM6Ly8xZHJ2Lm1zL2YvYy82NDQ5MmNmMWZjNTZjZGRlL0lnQmlsZE1IYWVETFE3Tlh3a3FYQ0tETEFiVnJrN3N5RjBsaElJdTNQU1ZKVVBVP2U9c01KUDJU) provided in the README
+3. Extract the archive to `data/raw/`:
+   ```bash
+   # After downloading darkdriving_lle.zip
+   unzip darkdriving_lle.zip -d data/raw/
+   ```
+
+Then patch the vendor tree and build the nested splits:
+
+```bash
+python scripts/setup.py \
+  --skip-install \
+  --shots 5 10 20 50 \
+  --seeds 1 2 3
+```
+
 The setup script prepares the vendored `img2img-turbo` code and the processed
 few-shot splits. It also applies the repository's replayable pix2pix and
 CycleGAN compatibility and memory patches. Dataset preparation fully decodes
-both sides of each raw pair and excludes corrupt pairs before deterministic
-few-shot sampling. Setup never deletes files from an existing processed split.
-If you already have the processed
-data and only want to patch the vendored training tree, use:
-
-```bash
-python scripts/setup.py --skip-install --skip-prepare
-```
+both sides of each raw pair, excludes corrupt pairs, reserves a fixed validation
+set, and samples one ordered maximum-size set per seed so smaller shot levels
+are nested prefixes. Existing split directories are skipped unless you confirm
+the rebuild prompt; confirming rebuild deletes and recreates the processed
+targets. To patch only the vendored training tree when processed data already
+exists, use Route A's `setup.py --skip-install --skip-prepare` command.
 
 `external/img2img-turbo` is a generated tree. Setup resets its tracked files
 to the pinned upstream commit before replaying `patches/`; capture any vendor
@@ -108,6 +132,7 @@ data/
 │   │   ├── fixed_prompt_b.txt             
 │   │   └── test_prompts.json              # fixed prompts for paired model
 │
+│   ├── 5shot/
 │   ├── 10shot/
 │   │   ├── seed1/
 │   │   │   ├── train_A/
@@ -126,6 +151,16 @@ data/
 ...
 ```
 
+If 10-shot splits already exist and only the nested 5-shot extension is
+missing, derive it without resampling the larger grids:
+
+```bash
+python scripts/prepare_nested_subset.py \
+  --source-shot 10 \
+  --target-shot 5 \
+  --seeds 1 2 3
+```
+
 ## Full Experiment Pipeline
 
 The main orchestration entrypoint is `scripts/run_experiment.py`.
@@ -137,10 +172,12 @@ It iterates over every requested model, shot count, and seed, then runs:
 4. optional cross-run summarization
 
 By default it runs both `pix2pix` and `cyclegan` for `10`, `20`, and `50`
-shots with seeds `1`, `2`, and `3`.
+shots with seeds `1`, `2`, and `3`. The exploratory 5-shot extension is not a
+launcher default and must be requested explicitly.
 
-This is the complete 18-run grid, so use explicit models, shots, and seeds for
-pilots rather than starting the default command accidentally:
+The default is an 18-run grid; the reported 5/10/20/50 study contains 24 runs.
+Use explicit models, shots, and seeds for pilots rather than starting either
+grid accidentally:
 
 ```bash
 python scripts/run_experiment.py \
@@ -151,6 +188,25 @@ python scripts/run_experiment.py \
   --test-samples 200 \
   --generate-summary
 ```
+
+The reported 24-condition RTX 5090 grid can be reproduced explicitly with:
+
+```bash
+python scripts/run_experiment.py \
+  --models pix2pix cyclegan \
+  --shots 5 10 20 50 \
+  --seeds 1 2 3 \
+  --config configs/5090.yaml \
+  --gpus 0 1 \
+  --test-samples 200 \
+  --use-fp16 \
+  --generated-root results/full_grid_official_cmmd/generated \
+  --evaluation-root results/full_grid_official_cmmd/evaluation \
+  --generate-summary
+```
+
+This is a full training and evaluation run, not a smoke test. Omit extra GPU
+IDs on a single-GPU host; independent training jobs will then run sequentially.
 
 Useful flags:
 
@@ -166,6 +222,11 @@ Useful flags:
 - `--metrics ssim lpips clip_similarity cmmd`: override the evaluation metrics
 - `--use-fp16`: enable fp16 during generation when supported
 - `--gpus 0 1 ...`: assign independent training runs across the listed GPUs
+- `--generated-root PATH`: override the configured generation root
+- `--evaluation-root PATH`: override the configured evaluation root
+
+`--gpus` applies only to training. Generation and evaluation remain sequential
+and use their normal single-GPU code paths.
 
 ## Training Only
 
@@ -204,9 +265,16 @@ CycleGAN additionally uses FP16, gradient checkpointing, zero dataloader
 workers, and less frequent checkpoints. Its smoke configuration uses
 256-pixel preprocessing.
 
-The formal comparison uses a common budget of 4,000 optimizer steps for both
-models. Each run writes a structured `losses.csv` beside its checkpoints, so
-training curves do not depend on terminal scrollback or W&B availability.
+The reported formal comparison uses `configs/5090.yaml`: 2,000 optimizer steps,
+U-Net/VAE LoRA ranks 32/4, learning rate `1e-5`, resolution 512, and batch size
+1 for both models. Architecture-specific memory settings remain different:
+pix2pix-Turbo trains in full precision, while CycleGAN-Turbo uses FP16 and
+gradient checkpointing. `configs/base.yaml` is a portable baseline with the
+same 2,000-step budget but lower default U-Net ranks (8 for pix2pix and 4 for
+CycleGAN), so it does not reproduce the reported rank-32 grid unchanged.
+
+Each run writes a structured `losses.csv` beside its checkpoints, so training
+curves do not depend on terminal scrollback or W&B availability.
 
 The default training output root is controlled by `configs/base.yaml`:
 
@@ -253,7 +321,7 @@ the per-sample evaluation CSVs and regenerate only those filenames:
 
 ```bash
 python scripts/select_qualitative_samples.py \
-  --metrics-root results/full_grid_5090/evaluation \
+  --metrics-root results/full_grid_official_cmmd/evaluation \
   --output-dir results/qualitative_selection
 
 python scripts/generate_samples.py \
@@ -273,34 +341,74 @@ intersection shared by every run. Filename-derived generation seeds ensure that
 regenerating a selected image reproduces the original sample for the same
 checkpoint and configuration.
 
-Generation output is written under:
+Under `configs/base.yaml`, generation output is written under:
 
 ```text
 results/generated/<model>/<shot>shot/seed<seed>/
 ```
 
-Evaluation output is written under:
+and evaluation output is written under:
 
 ```text
 results/evaluation/<model>/<shot>shot/seed<seed>/
 ```
 
-Evaluation computes the metrics defined in `configs/base.yaml` by default:
+Other configurations and the two root override flags change these prefixes.
+Evaluation computes the configured metrics:
 
-- SSIM
-- LPIPS
-- CLIP image similarity
-- CMMD
+- SSIM (higher is better)
+- LPIPS with AlexNet (lower is better)
+- CLIP image-image similarity with ViT-B/32 (higher is better)
+- CMMD with normalized ViT-L/14@336px embeddings, Gaussian-kernel `sigma=10`,
+  and the conventional `1000x` reporting scale (lower is better)
 
 ## Summarization
 
 When enabled, the evaluation workflow also writes aggregate summaries across
-seeds. The summarization output lives under `results/evaluation/` and includes
-CSV and JSON tables for per-run and cross-seed reporting.
+seeds. Files are written under the configured or overridden evaluation root
+and include CSV and JSON tables for per-run and cross-seed reporting.
+
+## Inference Variability and Repeatability
+
+Generation uses a stable filename-derived seed plus `--generation-seed`, so a
+run is reproducible without depending on file traversal order. To compare the
+same checkpoint and inputs across several inference seeds, generate each seed
+into a separate root:
+
+```bash
+for generation_seed in 0 1 2 3 4; do
+  python scripts/generate_samples.py \
+    --models pix2pix \
+    --shots 10 \
+    --seeds 1 \
+    --config configs/5090.yaml \
+    --test-samples 200 \
+    --use-fp16 \
+    --generation-seed "${generation_seed}" \
+    --generated-root "results/inference_variability/gen_seed${generation_seed}"
+done
+```
+
+Then compare the direct run directories:
+
+```bash
+python scripts/compare_generation_seeds.py \
+  results/inference_variability/gen_seed{0,1,2,3,4}/pix2pix/10shot/seed1 \
+  --with-lpips \
+  --device cuda \
+  --output results/inference_variability/pix2pix_summary.json
+```
+
+The comparator reports exact-file agreement, pairwise pixel MAE, PSNR,
+unchanged-channel fraction, and optional pairwise LPIPS. Comparing repeated
+runs with the same generation seed tests exact run-to-run repeatability;
+comparing different generation seeds tests inference-seed sensitivity. These
+are diagnostics, not image-quality metrics.
 
 ## Configuration
 
-The default configuration is `configs/base.yaml`. It controls:
+The portable default configuration is `configs/base.yaml`; the reported RTX
+5090 grid uses `configs/5090.yaml`. Configuration files control:
 
 - dataset roots and image size
 - training batch size, learning rate, checkpoint cadence, and precision

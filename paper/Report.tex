@@ -89,7 +89,7 @@ Most mean improvements occur between 5 and 20 shots (Figure~\ref{fig:performance
 \subsection{Breaking-Point Analysis}
 
 \begin{table}[h]
-  \caption{Strongest exploratory breaking-point candidates. Variance ratios are seed/sample; none remains significant after Holm correction.}
+  \caption{Breaking-point candidates discussed in the text. Variance ratios are seed/sample; none satisfies the complete Holm-confirmed criterion.}
   \label{tab:breaking}
   \centering
   \small
@@ -98,10 +98,12 @@ Most mean improvements occur between 5 and 20 shots (Figure~\ref{fig:performance
     \toprule
     Model & Comparison & Evidence & Degradation & Variance ratios & Raw / Holm $p$ \\
     \midrule
-    pix2pix-turbo  & 5 vs 10  & CLIP  & $0.0293$ lower & $5.81/1.41\times$ & .016 / .177 \\
-    pix2pix-turbo  & 5 vs 10  & LPIPS & $+0.0258$ & $88.15/1.28\times$ & .032 / .322 \\
-    CycleGAN-Turbo & 10 vs 20 & CLIP  & $0.0122$ lower & $42.16/1.25\times$ & .004 / .051 \\
-    CycleGAN-Turbo & 5 vs 10  & LPIPS & $+0.0429$ & $9.38/1.53\times$ & .007 / .075 \\
+    pix2pix-turbo  & 5 vs 10  & CLIP  & $0.0293$ lower & $5.81/1.41\times$ & .0161 / .1773 \\
+    pix2pix-turbo  & 5 vs 10  & LPIPS & $+0.0258$ & $88.15/1.28\times$ & .0322 / .3219 \\
+    CycleGAN-Turbo & 10 vs 20 & CLIP  & $0.0122$ lower & $42.16/1.25\times$ & .0042 / .0507 \\
+    CycleGAN-Turbo & 5 vs 10  & CLIP  & $0.0188$ lower & $7.99/1.06\times$ & .0084 / .0753 \\
+    CycleGAN-Turbo & 5 vs 10  & LPIPS & $+0.0429$ & $9.38/1.53\times$ & .0075 / .0747 \\
+    CycleGAN-Turbo & 5 vs 10  & SSIM  & $0.0367$ lower & $1.43/0.98\times$ & .0049 / .0542 \\
     \bottomrule
   \end{tabular}
 \end{table}

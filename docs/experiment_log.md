@@ -4,6 +4,11 @@ This log records completed day-to-night experiments, configuration decisions,
 and the remaining formal evaluation work. Validation results must not be
 reported as held-out test results.
 
+> **Historical record:** entries retain the settings and plans in effect when
+> they were written. The authoritative final experiment configuration is
+> `configs/5090.yaml`; the final protocol and results are documented in
+> `paper/Report.tex` and `README.md`.
+
 ## Data contract
 
 - Task direction: day to night (`A=day`, `B=night`).
@@ -28,9 +33,10 @@ creation is reproducible with:
 python scripts/prepare_fewshot_splits.py --shots 10 20 50 --seeds 1 2 3
 ```
 
-## Current formal configuration
+## Historical baseline configuration
 
-Source: `configs/base.yaml` as reviewed on 2026-07-29.
+Source: `configs/base.yaml` as reviewed on 2026-07-29. This predates the final
+rank-32 RTX 5090 grid and is retained as an experiment-history snapshot.
 
 | Setting | Pix2Pix-Turbo | CycleGAN-Turbo |
 |---|---:|---:|
@@ -164,5 +170,5 @@ levels will be selected in response to its outcome.
 - [x] Generate held-out test outputs with a fixed generation seed.
 - [x] Evaluate all model/shot/seed runs and generate aggregate CSV/JSON files.
 - [x] Run the six exploratory 5-shot extensions and append their evaluation.
-- [ ] Perform qualitative failure-case review using the same selected
+- [x] Perform qualitative failure-case review using the same selected
   checkpoints.
