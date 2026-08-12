@@ -45,7 +45,7 @@ img2img-turbo instead adapts the distilled SD-Turbo model into an end-to-end, on
 
 pix2pix-turbo applies this generator once from day to night. Its released training objective combines paired pixel and LPIPS reconstruction, generated-image--target-text CLIP alignment, and a vision-aided adversarial loss on real versus generated target-domain images. CycleGAN-Turbo applies the same shared one-step U-Net in both directions, selected by day/night text embeddings, while using direction-specific VAE adaptation paths. Two discriminators enforce day and night realism; $x\!\rightarrow\!\hat y\!\rightarrow\!x_{\mathrm{rec}}$ and $y\!\rightarrow\!\hat x\!\rightarrow\!y_{\mathrm{rec}}$ receive L1 and LPIPS cycle losses, and identity passes receive analogous penalties. Thus, CycleGAN-Turbo does not use aligned day/night targets even when such filenames exist.
 
-The released pix2pix-turbo interface also supports stochastic generation by interpolating the encoded input with an external noise map and scaling adapters with a parameter $r$; CycleGAN-Turbo exposes no analogous interpolation control, although both implementations sample a VAE posterior latent. We did not tune these diversity controls. Formal evaluation used the pix2pix default deterministic branch, a fixed prompt, and a deterministic per-filename RNG seed for both models. Each score therefore represents one reproducible output per checkpoint and input; our reported variability concerns training seeds and test samples, not repeated-generation diversity from a fixed checkpoint.
+The released pix2pix-turbo interface also supports stochastic generation by interpolating the encoded input with an external noise map and scaling adapters with a parameter $r$; CycleGAN-Turbo exposes no analogous interpolation control, although both implementations sample a VAE posterior latent. We did not tune these diversity controls. Formal evaluation used the pix2pix default deterministic branch, a fixed prompt, and a deterministic per-filename RNG seed for both models. Each primary score therefore represents one reproducible output per checkpoint and input, so breaking-point variability concerns training seeds and test samples. A separate repeated-generation diagnostic in Appendix~\ref{app:inference-variability} measures residual inference-seed sensitivity.
 
 \section{Methods}
 
@@ -116,7 +116,7 @@ Figure~\ref{fig:qualitative} illustrates the metric-dependent behavior. Five-sho
 
 In this comparison, pix2pix-turbo achieves better paired-target fidelity, as reflected by lower LPIPS, whereas CycleGAN-Turbo achieves better distributional alignment under our distribution-level metric. Because the models differ in their objectives and some implementation settings, these differences should not be attributed to supervision alone. At 20--50 shots, the models converge on similar SSIM and CLIP values while retaining this fidelity--distribution trade-off. The practical choice should therefore follow the intended criterion rather than a universal model ranking. The absence of a Holm-confirmed threshold is itself informative: the observed low-shot changes are metric-specific and too uncertain to support a single universal breaking point.
 
-Six limitations constrain interpretation. First, three seeds provide limited statistical power, so even the near-threshold Holm result is uncertain. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Fourth, CMMD is distribution-level and has no per-sample variance. Fifth, one seeded output per input does not measure inference-time output diversity. Finally, one model represents each supervision regime, so model-specific architectural and objective differences are confounded with the paired-versus-unpaired comparison. Additional seeds, datasets, repeated-generation sweeps, and training-budget sweeps are needed before assigning a general breaking threshold. 
+Six limitations constrain interpretation. First, three seeds provide limited statistical power, so even the near-threshold Holm result is uncertain. Second, results cover one driving dataset, one backbone, and one set of loss weights. Third, the fixed 2,000-step budget equalizes stopping but not effective epochs or compute. Fourth, CMMD is distribution-level and has no per-sample variance. Fifth, the inference-seed diagnostic covers only one 10-shot checkpoint and does not test pix2pix-turbo's explicit stochastic interpolation parameter. Finally, one model represents each supervision regime, so model-specific architectural and objective differences are confounded with the paired-versus-unpaired comparison. Additional seeds, datasets, broader repeated-generation sweeps, and training-budget sweeps are needed before assigning a general breaking threshold. 
 
 \section{Conclusion}
 
@@ -278,5 +278,29 @@ After integrity filtering, each training split was sampled from the same valid p
 \end{enumerate}
 
 Qualitative cases were selected from the same 200 filenames without inspecting the images. Define aggregate difficulty as standardized LPIPS minus standardized SSIM and CLIP similarity. The typical case is closest to its median, the challenging case is closest to its 90th percentile, and the breaking-sensitive case maximizes the pre-specified combination of pix2pix-turbo 5-to-10 LPIPS degradation and CycleGAN-Turbo 10-to-20 CLIP degradation, while favoring seed-consistent changes.
+
+\clearpage
+\section{Inference-Seed Sensitivity}
+\label{app:inference-variability}
+
+We additionally held the 10-shot, training-seed-1 checkpoint and 20 test inputs fixed while varying the inference seed from 0 to 4. For each input, we compared all ten unordered output pairs. Pairwise LPIPS measures perceptual change; MAE and the 95th-percentile absolute difference are reported in 8-bit intensity levels, and PSNR is computed directly between generated outputs. These quantities measure sensitivity rather than image quality.
+
+\begin{table}[h]
+  \caption{Repeated-generation sensitivity across 20 inputs and five inference seeds (200 output-pair comparisons per model). Lower LPIPS and pixel differences, higher PSNR, and more unchanged channels indicate lower sensitivity.}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{lccccc}
+    \toprule
+    Model & LPIPS $\downarrow$ & MAE $\downarrow$ & 95th pct. $\downarrow$ & PSNR $\uparrow$ & Unchanged \%
+    \\
+    \midrule
+    pix2pix-turbo & 0.00996 & 0.2505 & 1.175 & 52.28 & 80.49 \\
+    CycleGAN-Turbo & 0.00964 & 0.2432 & 1.115 & 52.33 & 81.14 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+No input produced byte-identical files across all five seeds, confirming numerical stochasticity. Nevertheless, pairwise LPIPS remained below 0.01 on average, mean absolute differences were about one quarter of an 8-bit level, and pairwise PSNR exceeded 52 dB for both models. We therefore characterize both as having low inference-seed sensitivity under the evaluated default inference paths. CycleGAN-Turbo's slightly smaller values are descriptive only: this diagnostic uses one checkpoint and was not designed or powered as a model-ranking test.
 
 \end{document}
